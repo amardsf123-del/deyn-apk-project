@@ -47,3 +47,5 @@ jobs:
             inspection.txt
           if-no-files-found: error
           retention-days: 3
+
+# Inspection workflow is intentionally separate from APK builds.
