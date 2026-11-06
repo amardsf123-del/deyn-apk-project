@@ -1,0 +1,49 @@
+name: Inspect DEYN source archive
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-deyn.yml'
+      - 'deyn-apk-project.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract and inventory project
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s deyn-apk-project.zip
+          mkdir -p source
+          unzip -q deyn-apk-project.zip -d source
+          {
+            echo "ARCHIVE CONTENTS"
+            find source -maxdepth 5 -type f | sort
+            echo
+            echo "PACKAGE FILES"
+            find source -name package.json -type f -print
+            echo
+            echo "ANDROID / BUILD FILES"
+            find source \( -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'AndroidManifest.xml' -o -name 'capacitor.config.*' \) -type f -print
+            echo
+            echo "ACTIVATION / SECURITY MATCHES"
+            grep -RniE 'DEYN_SECRET|FACTORY_PASS|donomar47|HMAC|Ed25519|privateKey|publicKey|SecureStorage|localStorage|expiry|expiresAt|trusted.?time|device.?id|recovery' source --exclude-dir=node_modules --exclude='*.lock' || true
+          } > inspection.txt
+          cat inspection.txt
+      - name: Upload extracted source for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: deyn-source-inspection
+          path: |
+            source/
+            inspection.txt
+          if-no-files-found: error
+          retention-days: 3
