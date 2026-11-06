@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'DEYN-secure-v2-project.zip'
+      - 'deyn-apk-project.zip'
 
 jobs:
   build:
@@ -25,8 +25,8 @@ jobs:
           java-version: 21
       - name: Extract project archive
         run: |
-          test -f DEYN-secure-v2-project.zip
-          unzip -q DEYN-secure-v2-project.zip -d source
+          test -f deyn-apk-project.zip
+          unzip -q deyn-apk-project.zip -d source
       - name: Build APK
         working-directory: source/${{ matrix.app }}
         run: |
