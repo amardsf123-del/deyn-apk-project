@@ -1,0 +1,46 @@
+name: Build DEYN APKs
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'DEYN-secure-v2-project.zip'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [deyn-app, deyn-keygen]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Extract project archive
+        run: |
+          test -f DEYN-secure-v2-project.zip
+          unzip -q DEYN-secure-v2-project.zip -d source
+      - name: Build APK
+        working-directory: source/${{ matrix.app }}
+        run: |
+          npm install
+          python3 scripts/fetch_fonts.py
+          npx cap add android
+          bash scripts/prepare-android.sh
+          npx cap sync android
+          cd android
+          ./gradlew assembleDebug
+      - name: Upload debug APK for testing only
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-debug-apk
+          path: source/${{ matrix.app }}/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
