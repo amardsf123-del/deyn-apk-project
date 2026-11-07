@@ -176,6 +176,29 @@ test("worker cannot issue owner session for an unregistered or different device"
   }), /permission-denied/);
 });
 
+test("owner enrollment rejects an existing device record with a conflicting role", async () => {
+  await clearShop();
+  await setupShop();
+  const ref = db.collection("shops").doc(shopId).collection("devices")
+    .doc(ownerDevice + "__owner-uid-0001");
+  await ref.update({ role: "worker" });
+  await assert.rejects(service.enrollOwnerDevice({
+    uid: "owner-uid-0001", shopId, deviceId: ownerDevice,
+    authTime: Math.floor(clock / 1000)
+  }), /permission-denied/);
+});
+
+test("session issuance rejects mismatched membership and device identity fields", async () => {
+  await clearShop();
+  await setupShop();
+  const ref = db.collection("shops").doc(shopId).collection("devices")
+    .doc(ownerDevice + "__owner-uid-0001");
+  await ref.update({ shopId: "different-shop" });
+  await assert.rejects(service.issueDeviceSession({
+    uid: "owner-uid-0001", shopId, deviceId: ownerDevice
+  }), /permission-denied/);
+});
+
 test("revoked device cannot obtain another session", async () => {
   await clearShop();
   await setupShop();
