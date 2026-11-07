@@ -1,0 +1,26 @@
+name: DEYN source inspection bundle
+on:
+  push:
+    branches: [fix/storage-safety-2026-11]
+    paths: ['.github/workflows/export-deyn-source.yml']
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/storage-safety-2026-11
+      - name: Export nested source archive for inspection
+        run: |
+          set -euo pipefail
+          mkdir -p inspect
+          cp deyn-apk-project.zip inspect/
+          unzip -q deyn-apk-project.zip -d inspect/source
+          find inspect/source -maxdepth 3 -type f | sort > inspect/file-list.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DEYN-source-inspection
+          path: inspect/
+          retention-days: 3
