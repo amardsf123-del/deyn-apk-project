@@ -2,7 +2,7 @@ import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { assertPlatformAdmin, createMembershipService } from "./membership-service.js";
+import { assertPlatformAdmin, assertVerifiedOwnerAccount, createMembershipService } from "./membership-service.js";
 
 initializeApp();
 const authAdmin = getAuth();
@@ -40,10 +40,7 @@ export const createShop = onCall(options, wrap(async (request) => {
   if (typeof ownerUid !== "string" || ownerUid.length < 6 || !ownerEmail) {
     throw new HttpsError("invalid-argument", "owner-account-required");
   }
-  const ownerUser = await authAdmin.getUser(ownerUid);
-  if (!ownerUser.emailVerified || ownerUser.email?.toLowerCase() !== ownerEmail) {
-    throw new HttpsError("permission-denied", "owner-email-must-be-verified-and-match");
-  }
+  await assertVerifiedOwnerAccount(authAdmin, ownerUid, ownerEmail);
   return service.createShop({
     ownerUid,
     subscriptionExpiresAtMs: request.data?.subscriptionExpiresAtMs ?? null
