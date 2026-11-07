@@ -5,7 +5,7 @@
 const ROLES = new Set(["owner", "worker"]);
 const ACTIONS = new Set([
   "read", "createCustomer", "addDebt", "addPayment",
-  "editCustomer", "deleteCustomer", "editLedgerEntry", "deleteLedgerEntry", "reverseLedgerEntry"
+  "editCustomer", "deleteCustomer", "editLedgerEntry", "deleteLedgerEntry"
 ]);
 
 const WORKER_ACTIONS = new Set(["read", "createCustomer", "addDebt", "addPayment"]);
