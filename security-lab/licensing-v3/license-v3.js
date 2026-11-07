@@ -33,11 +33,19 @@ function base64UrlToBytes(value) {
   }
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+  let decoded;
   if (typeof atob === "function") {
     const binary = atob(padded);
-    return Uint8Array.from(binary, c => c.charCodeAt(0));
+    decoded = Uint8Array.from(binary, c => c.charCodeAt(0));
+  } else {
+    decoded = new Uint8Array(Buffer.from(padded, "base64"));
   }
-  return new Uint8Array(Buffer.from(padded, "base64"));
+  // Reject alternate textual encodings that decode to the same bytes.
+  // Without this check, changing unused trailing bits may not alter the signature bytes.
+  if (bytesToBase64Url(decoded) !== value) {
+    throw new Error("Non-canonical base64url data");
+  }
+  return decoded;
 }
 
 function decodePrivateKeyInput(value) {
