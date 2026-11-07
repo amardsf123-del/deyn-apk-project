@@ -20,8 +20,8 @@ service cloud.firestore {
     function shopActive(shopId) {
       let shop = get(shopPath(shopId)).data;
       return shop.status == "active"
-        && (shop.subscriptionExpiresAt == null
-          || request.time < shop.subscriptionExpiresAt);
+        && (shop.subscriptionExpiresAtMs == null
+          || request.time.toMillis() < shop.subscriptionExpiresAtMs);
     }
 
     function activeMember(shopId) {
