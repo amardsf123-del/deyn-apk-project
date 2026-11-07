@@ -1,6 +1,7 @@
 name: Export DEYN lab branches for review
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
