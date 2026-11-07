@@ -1,0 +1,51 @@
+name: Export DEYN lab branches for review
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/export-deyn-labs.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout all branches
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Package review-safe branch archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          for branch in security-v2-lab cloud-sync-lab ouisync-poc; do
+            git worktree add "/tmp/$branch" "origin/$branch"
+            (cd "/tmp/$branch" && zip -qr "$GITHUB_WORKSPACE/DEYN-$branch.zip" . \
+              -x '*.pem' '*.key' '.env' '.env.*' '*private*key*' '*secret*')
+            git worktree remove "/tmp/$branch"
+          done
+
+      - name: Upload security lab
+        uses: actions/upload-artifact@v4
+        with:
+          name: DEYN-security-v2-lab
+          path: DEYN-security-v2-lab.zip
+          retention-days: 7
+
+      - name: Upload cloud sync lab
+        uses: actions/upload-artifact@v4
+        with:
+          name: DEYN-cloud-sync-lab
+          path: DEYN-cloud-sync-lab.zip
+          retention-days: 7
+
+      - name: Upload local sync POC
+        uses: actions/upload-artifact@v4
+        with:
+          name: DEYN-ouisync-poc
+          path: DEYN-ouisync-poc.zip
+          retention-days: 7
