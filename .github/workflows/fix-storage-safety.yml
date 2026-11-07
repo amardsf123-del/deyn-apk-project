@@ -1,0 +1,142 @@
+name: DEYN Ed25519 protection and Android test build
+
+on:
+  push:
+    branches: [fix/storage-safety-2026-11]
+    paths:
+      - 'scripts/apply-storage-safety.py'
+      - 'scripts/apply-ed25519.py.z.b64'
+      - 'scripts/ed25519-integration-trigger.txt'
+      - 'scripts/fix-ed25519-code-length.py'
+      - '.github/workflows/fix-storage-safety.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/storage-safety-2026-11
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Apply local-storage safety guard
+        run: python scripts/apply-storage-safety.py
+      - name: Integrate Ed25519 signing and verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/deyn-check
+          unzip -q deyn-apk-project.zip -d /tmp/deyn-check
+          if ! grep -q 'var DEYN_PUBLIC_KEY' /tmp/deyn-check/deyn-app/www/index.html; then
+          python - <<'PY'
+          import base64, zlib
+          from pathlib import Path
+          payload = Path('scripts/apply-ed25519.py.z.b64').read_text().strip()
+          Path('scripts/apply-ed25519.py').write_bytes(zlib.decompress(base64.b64decode(payload)))
+          PY
+            sed -i "s/\[\['tier',v=>tier=v\],\['role',v=>role=v\]\]/[['tierSeg',v=>tier=v],['roleSeg',v=>role=v]]/" scripts/apply-ed25519.py
+            python scripts/apply-ed25519.py
+          else
+            echo "Ed25519 already integrated; checking the existing source."
+            ! grep -q 'DEYN_OFFLINE_SECRET' /tmp/deyn-check/deyn-app/www/index.html
+          fi
+      - name: Fix signed activation code input length
+        run: python scripts/fix-ed25519-code-length.py
+      - name: Apply device ID layout and production public key
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile, tempfile
+          archive = Path('deyn-apk-project.zip')
+          public_key = 'uM8GgGamY++GH9e2PTTkluRlzqEVdbnj+MLh4uFYr/Y='
+          with tempfile.TemporaryDirectory() as td:
+              root = Path(td)
+              with zipfile.ZipFile(archive) as z:
+                  z.extractall(root)
+              app = root/'deyn-app/www/index.html'
+              s = app.read_text(encoding='utf-8')
+              import re
+              s, n = re.subn(r"var DEYN_PUBLIC_KEY\s*=\s*'[^']+';", "var DEYN_PUBLIC_KEY = '"+public_key+"';", s, count=1)
+              if n != 1: raise SystemExit('Could not locate the DEYN public key')
+              old = ".ag-id{display:block;white-space:nowrap;font:800 clamp(19px,min(5.6vw,3.6dvh),30px)/1.25 'Plus Jakarta Sans','Alexandria',sans-serif;letter-spacing:.02em;color:#0f172a;direction:ltr;user-select:all;-webkit-user-select:all}"
+              new = ".ag-id{display:block;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-all;font:800 clamp(12px,3.4vw,16px)/1.5 'Plus Jakarta Sans','Alexandria',sans-serif;letter-spacing:.035em;color:#0f172a;direction:ltr;user-select:all;-webkit-user-select:all;text-align:center}"
+              if old in s: s=s.replace(old,new,1)
+              elif new not in s: raise SystemExit('Device ID CSS did not match expected source')
+              app.write_text(s,encoding='utf-8')
+              kg = root/'deyn-keygen/www/index.html'
+              k = kg.read_text(encoding='utf-8')
+              k, n = re.subn(r"const PUBLIC_KEY\s*=\s*'[^']+';", "const PUBLIC_KEY='"+public_key+"';", k, count=1)
+              if n != 1: raise SystemExit('Could not locate the key-generator public key')
+              kg.write_text(k,encoding='utf-8')
+              # Make PEM import tolerant of UTF-8 BOM and invisible Unicode whitespace,
+              # and return a clear Arabic validation error instead of the raw atob exception.
+              k = kg.read_text(encoding='utf-8')
+              old_b64 = "const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));"
+              new_b64 = """function pemBytes(pem){
+ const text=String(pem||'').replace(/^\\uFEFF/,'').trim();
+ const match=text.match(/-----BEGIN PRIVATE KEY-----([\\s\\S]*?)-----END PRIVATE KEY-----/);
+ if(!match)throw Error('ملف المفتاح غير صالح. اختر ملف DEYN_PRIVATE.pem وليس ملف ZIP أو المفتاح العام');
+ const body=match[1].replace(/[\\s\\uFEFF\\u200B-\\u200D\\u2060]/g,'');
+ if(/[^^\\x00-\\x7F]/.test(body))throw Error('ملف PEM يحتوي على أحرف غير صالحة. أعد اختيار ملف DEYN_PRIVATE.pem الأصلي');
+ if(!/^[A-Za-z0-9+/]+={0,2}$/.test(body)||body.length%4!==0)throw Error('محتوى المفتاح غير مكتمل أو ليس بصيغة PEM صحيحة');
+ try{return Uint8Array.from(atob(body),c=>c.charCodeAt(0));}
+ catch(e){throw Error('تعذّر قراءة ترميز المفتاح. اختر ملف DEYN_PRIVATE.pem الأصلي من ZArchiver');}
+}
+const b64=s=>{try{return Uint8Array.from(atob(s),c=>c.charCodeAt(0));}catch(e){throw Error('بيانات المفتاح العام داخل التطبيق غير صالحة');}};"""
+              if old_b64 not in k: raise SystemExit('Could not locate the Base64 decoder in Keygen')
+              k = k.replace(old_b64,new_b64,1)
+              k = k.replace("b64(body),{name:'Ed25519'}","pemBytes(pem),{name:'Ed25519'}",1)
+              kg.write_text(k,encoding='utf-8')
+              tmp = archive.with_suffix('.tmp.zip')
+              with zipfile.ZipFile(tmp,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
+                  for p in sorted(root.rglob('*')):
+                      if p.is_file(): z.write(p,p.relative_to(root).as_posix())
+              tmp.replace(archive)
+          PY
+      - name: Commit updated application archive
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deyn-apk-project.zip
+          if ! git diff --cached --quiet; then
+            git commit -m "Fix device ID layout and rotate DEYN Ed25519 key"
+            git push
+          fi
+      - name: Build DEYN and key generator debug APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -q deyn-apk-project.zip -d source
+          for app in deyn-app deyn-keygen; do
+            pushd "source/$app"
+            npm install
+            python3 scripts/fetch_fonts.py
+            npx cap add android
+            bash scripts/prepare-android.sh
+            npx cap sync android
+            (cd android && ./gradlew assembleDebug)
+            popd
+          done
+      - name: Upload Android debug APKs for testing only
+        uses: actions/upload-artifact@v4
+        with:
+          name: DEYN-ed25519-debug-apks
+          path: |
+            source/deyn-app/android/app/build/outputs/apk/debug/*.apk
+            source/deyn-keygen/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
