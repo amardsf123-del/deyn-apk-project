@@ -31,7 +31,7 @@ The current GitHub workflow runs:
 - 15 Firestore Security Rules tests against the Firebase Emulator.
 - 12 backend membership-service tests against the Firestore Emulator, including concurrent invitation redemption, expiry, wrong email, forged owner claims, platform-admin-only shop provisioning, owner recovery, device revocation, and worker membership revocation.
 
-Latest passing run: [GitHub Actions 42382123122](https://github.com/amardsf123-del/deyn-apk-project/actions/runs/42382123122).
+Latest passing run: [GitHub Actions 42382365427](https://github.com/amardsf123-del/deyn-apk-project/actions/runs/42382365427).
 
 ## Deployment requirements and limitations
 
