@@ -54,6 +54,14 @@ function deviceRef(db, shopId, deviceId, uid) {
 function userShopRef(db, uid, shopId) {
   return db.collection("users").doc(uid).collection("shops").doc(shopId);
 }
+function countActivePhysicalDevices(snapshot) {
+  const ids = new Set();
+  for (const doc of snapshot.docs) {
+    const device = doc.data();
+    if (device.status === "active" && validDevice(device.deviceId)) ids.add(device.deviceId);
+  }
+  return ids.size;
+}
 
 function assertActiveShop(shop, nowMs) {
   if (!shop || shop.status !== "active") fail("failed-precondition");
@@ -97,7 +105,7 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
     }
     const shopId = makeId().replaceAll("-", "").slice(0, 24);
     const shop = {
-      shopId, ownerUid, status: "active", subscriptionExpiresAtMs,
+      shopId, ownerUid, status: "active", subscriptionExpiresAtMs, maxDevices: 2,
       createdAtMs: nowMs, updatedAtMs: nowMs, schemaVersion: 1
     };
     await db.runTransaction(async (tx) => {
@@ -124,7 +132,10 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
       const sRef = shopRef(db, shopId);
       const mRef = memberRef(db, shopId, uid);
       const dRef = deviceRef(db, shopId, deviceId, uid);
-      const [sSnap, mSnap, dSnap] = await Promise.all([tx.get(sRef), tx.get(mRef), tx.get(dRef)]);
+      const devicesQuery = sRef.collection("devices");
+      const [sSnap, mSnap, dSnap, devicesSnap] = await Promise.all([
+        tx.get(sRef), tx.get(mRef), tx.get(dRef), tx.get(devicesQuery)
+      ]);
       const shop = sSnap.exists ? sSnap.data() : null;
       const member = mSnap.exists ? mSnap.data() : null;
       assertActiveShop(shop, nowMs);
@@ -132,6 +143,13 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
         fail("permission-denied");
       }
       if (dSnap.exists && dSnap.data().status !== "active") fail("permission-denied");
+      const alreadyEnrolledPhysicalDevice = devicesSnap.docs.some((item) =>
+        item.data().deviceId === deviceId && item.data().status === "active"
+      );
+      const maxDevices = Number.isSafeInteger(shop.maxDevices) ? shop.maxDevices : 2;
+      if (!alreadyEnrolledPhysicalDevice && countActivePhysicalDevices(devicesSnap) >= maxDevices) {
+        fail("resource-exhausted");
+      }
       if (!dSnap.exists) tx.create(dRef, {
         deviceId, uid, shopId, role: "owner", status: "active",
         approvedByUid: uid, createdAtMs: nowMs, recoveryEnrollment: true
@@ -182,8 +200,8 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
       const iRef = sRef.collection("invitations").doc(invitationId);
       const mRef = memberRef(db, shopId, uid);
       const dRef = deviceRef(db, shopId, deviceId, uid);
-      const [sSnap, iSnap, mSnap, dSnap] = await Promise.all([
-        tx.get(sRef), tx.get(iRef), tx.get(mRef), tx.get(dRef)
+      const [sSnap, iSnap, mSnap, dSnap, devicesSnap] = await Promise.all([
+        tx.get(sRef), tx.get(iRef), tx.get(mRef), tx.get(dRef), tx.get(sRef.collection("devices"))
       ]);
       const shop = sSnap.exists ? sSnap.data() : null;
       const invite = iSnap.exists ? iSnap.data() : null;
@@ -198,6 +216,13 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
         fail("failed-precondition");
       }
       if (dSnap.exists && dSnap.data().status !== "active") fail("permission-denied");
+      const alreadyEnrolledPhysicalDevice = devicesSnap.docs.some((item) =>
+        item.data().deviceId === deviceId && item.data().status === "active"
+      );
+      const maxDevices = Number.isSafeInteger(shop.maxDevices) ? shop.maxDevices : 2;
+      if (!alreadyEnrolledPhysicalDevice && countActivePhysicalDevices(devicesSnap) >= maxDevices) {
+        fail("resource-exhausted");
+      }
       if (!mSnap.exists) tx.create(mRef, {
         uid, shopId, role: "worker", status: "active", createdAtMs: nowMs,
         invitedByUid: invite.createdByUid
@@ -279,8 +304,9 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
       const ownerM = memberRef(db, shopId, uid);
       const ownerD = deviceRef(db, shopId, ownerDeviceId, uid);
       const targetM = memberRef(db, shopId, targetUid);
-      const [sSnap, mSnap, dSnap, targetSnap] = await Promise.all([
-        tx.get(sRef), tx.get(ownerM), tx.get(ownerD), tx.get(targetM)
+      const [sSnap, mSnap, dSnap, targetSnap, targetDevicesSnap] = await Promise.all([
+        tx.get(sRef), tx.get(ownerM), tx.get(ownerD), tx.get(targetM),
+        tx.get(sRef.collection("devices").where("uid", "==", targetUid))
       ]);
       const shop = sSnap.exists ? sSnap.data() : null;
       assertActiveShop(shop, nowMs);
@@ -288,6 +314,11 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
       if (!targetSnap.exists) fail("not-found");
       if (targetSnap.data().role === "owner") fail("failed-precondition");
       tx.update(targetM, { status: "inactive", revokedAtMs: nowMs, revokedByUid: uid });
+      for (const targetDevice of targetDevicesSnap.docs) {
+        if (targetDevice.data().status === "active") {
+          tx.update(targetDevice.ref, { status: "revoked", revokedAtMs: nowMs, revokedByUid: uid });
+        }
+      }
       tx.set(userShopRef(db, targetUid, shopId), {
         shopId, role: targetSnap.data().role, status: "inactive",
         revokedAtMs: nowMs, revokedByUid: uid
