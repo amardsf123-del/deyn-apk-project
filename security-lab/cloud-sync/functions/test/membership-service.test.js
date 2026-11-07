@@ -302,3 +302,48 @@ test("shop provisioning requires an existing verified owner email that matches t
   await assert.rejects(assertVerifiedOwnerAccount(auth, "unverified-owner", "owner@example.com"), /permission-denied/);
   await assert.rejects(assertVerifiedOwnerAccount(auth, "verified-owner", "attacker@example.com"), /permission-denied/);
 });
+
+test("device limit counts physical phones, while owner recovery on worker phone reuses its device ID", async () => {
+  await clearShop();
+  await setupShop();
+  const invitation = await service.createWorkerInvitation({
+    claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
+    targetEmail: "worker@example.com"
+  });
+  await service.redeemWorkerInvitationForShop({
+    uid: "worker-uid-0002", email: "worker@example.com", emailVerified: true,
+    shopId, invitationSecret: invitation.invitationSecret, deviceId: workerDevice
+  });
+  const ownerRecoverySession = await service.enrollOwnerDevice({
+    uid: "owner-uid-0001", shopId, deviceId: workerDevice,
+    authTime: Math.floor(clock / 1000)
+  });
+  assert.equal(ownerRecoverySession.role, "owner");
+  const devices = await db.collection("shops").doc(shopId).collection("devices").get();
+  assert.equal(devices.size, 3);
+  assert.equal(new Set(devices.docs.map(x => x.data().deviceId)).size, 2);
+  await assert.rejects(service.enrollOwnerDevice({
+    uid: "owner-uid-0001", shopId, deviceId: "d".repeat(32),
+    authTime: Math.floor(clock / 1000)
+  }), /resource-exhausted/);
+});
+
+test("deactivating a worker revokes all of that worker's device enrollments", async () => {
+  await clearShop();
+  await setupShop();
+  const invitation = await service.createWorkerInvitation({
+    claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
+    targetEmail: "worker@example.com"
+  });
+  await service.redeemWorkerInvitationForShop({
+    uid: "worker-uid-0002", email: "worker@example.com", emailVerified: true,
+    shopId, invitationSecret: invitation.invitationSecret, deviceId: workerDevice
+  });
+  await service.revokeMember({
+    claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
+    targetUid: "worker-uid-0002"
+  });
+  const workerDeviceDoc = await db.collection("shops").doc(shopId).collection("devices")
+    .doc(workerDevice + "__worker-uid-0002").get();
+  assert.equal(workerDeviceDoc.data().status, "revoked");
+});
