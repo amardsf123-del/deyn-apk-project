@@ -2,7 +2,7 @@ name: Test DEYN security lab
 
 on:
   push:
-    branches: [security-v2-lab]
+    branches: [security-v2-lab, cloud-sync-lab]
     paths:
       - "security-lab/**"
       - ".github/workflows/test-deyn-security-lab.yml"
