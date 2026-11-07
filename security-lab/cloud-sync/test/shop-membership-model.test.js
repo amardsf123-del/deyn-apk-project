@@ -109,11 +109,20 @@ test("verified owner can enroll a replacement phone under the same owner account
 });
 
 test("worker cannot register as primary owner", () => {
-  const result = validateDeviceRegistration({ deviceId: "e".repeat(32), uid: "worker_uid_123", shopId: shop.shopId, role: ROLES.OWNER, approvedByUid: shop.ownerUid, shop });
+  const result = validateDeviceRegistration({
+    deviceId: "e".repeat(32), uid: "worker_uid_123", shopId: shop.shopId,
+    role: ROLES.OWNER, shop, nowMs: now,
+    approverClaims: ownerClaims, approverMember: ownerMember, approverDevice: ownerDevice
+  });
   assert.equal(result.reason, "only_primary_owner_uid_can_be_owner");
 });
 test("two physical phones keep separate device IDs and share shop expiry", () => {
-  const second = validateDeviceRegistration({ deviceId: "f".repeat(32), uid: "worker_uid_123", shopId: shop.shopId, role: ROLES.WORKER, approvedByUid: shop.ownerUid, shop }).record;
+  const second = validateDeviceRegistration({
+    deviceId: "f".repeat(32), uid: "worker_uid_123", shopId: shop.shopId,
+    role: ROLES.WORKER, shop, nowMs: now,
+    approverClaims: ownerClaims, approverMember: ownerMember, approverDevice: ownerDevice,
+    invitation: { shopId: shop.shopId, targetUid: "worker_uid_123", role: ROLES.WORKER, status: "pending", expiresAtMs: now + 60_000 }
+  }).record;
   assert.notEqual(second.deviceId, ownerDevice.deviceId);
   assert.equal(shop.subscriptionExpiresAtMs, now + 86_400_000);
 });
