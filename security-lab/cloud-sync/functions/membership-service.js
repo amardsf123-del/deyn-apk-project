@@ -11,7 +11,7 @@ const fail = (code) => {
 };
 
 export function assertPlatformAdmin(claims) {
-  if (claims?.platformAdmin !== true) fail("permission-denied");
+  if (claims?.platformAdmin !== true || claims?.email_verified !== true) fail("permission-denied");
   return true;
 }
 
