@@ -89,6 +89,13 @@ service cloud.firestore {
           && request.resource.data.kind in ["debt", "payment"]
           && request.resource.data.amountCentimes is int
           && request.resource.data.amountCentimes > 0
+          && request.resource.data.amountCentimes <= 9007199254740991
+          && request.resource.data.note is string
+          && request.resource.data.note.size() <= 1000
+          && request.resource.data.keys().hasOnly([
+            "eventId", "shopId", "customerId", "kind", "amountCentimes",
+            "note", "createdAtMs", "deviceId", "actorUid"
+          ])
           && request.resource.data.createdAtMs is int
           && request.resource.data.createdAtMs > 0
           && request.resource.data.createdAtMs <= request.time.toMillis() + 300000
