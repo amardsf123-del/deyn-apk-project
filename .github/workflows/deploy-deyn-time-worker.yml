@@ -1,0 +1,42 @@
+name: Deploy DEYN trusted-time Worker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        run: npm install --global wrangler@4
+
+      - name: Configure Worker signing secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TIME_SIGNING_PRIVATE_KEY_PKCS8_B64: ${{ secrets.TIME_SIGNING_PRIVATE_KEY_PKCS8_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$TIME_SIGNING_PRIVATE_KEY_PKCS8_B64"
+          printf '%s' "$TIME_SIGNING_PRIVATE_KEY_PKCS8_B64" | wrangler secret put TIME_SIGNING_PRIVATE_KEY_PKCS8_B64 --config security-lab/trusted-time-worker/wrangler.toml
+
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          wrangler deploy --config security-lab/trusted-time-worker/wrangler.toml --account-id "$CLOUDFLARE_ACCOUNT_ID"
