@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   authorize, validateLedgerEvent, mergeLedgerEvents,
-  calculateBalance, updateCustomerProfile
+  calculateBalance, updateCustomerProfile, summarizeCustomerBalances
 } from "../sync-core.js";
 
 const debt = {
@@ -83,4 +83,38 @@ test("stale customer profile update is rejected rather than overwriting newer da
 test("identity and revision fields cannot be changed through a profile patch", () => {
   const current = { id: "cust-1", shopId: "shop-1", name: "Ali", revision: 1, createdAtMs: 10 };
   assert.throws(() => updateCustomerProfile(current, { shopId: "shop-2" }, "owner", 1), /cannot be changed/);
+});
+
+test("analytics summarize 500 customers and more without losing totals", () => {
+  const events = [];
+  for (let i = 0; i < 600; i++) {
+    events.push({
+      eventId: "debt-" + i, shopId: "shop-1", customerId: "customer-" + i,
+      kind: "debt", amountDzd: 1000 + i, createdAtMs: 1000 + i,
+      deviceId: "device-owner", actorUid: "uid-owner"
+    });
+    events.push({
+      eventId: "payment-" + i, shopId: "shop-1", customerId: "customer-" + i,
+      kind: "payment", amountDzd: 250, createdAtMs: 2000 + i,
+      deviceId: "device-worker", actorUid: "uid-worker"
+    });
+  }
+  const summaries = summarizeCustomerBalances(events);
+  assert.equal(summaries.size, 600);
+  assert.equal(summaries.get("customer-0").balanceDzd, 750);
+  assert.equal(summaries.get("customer-599").balanceDzd, 1349);
+  const totals = [...summaries.values()].reduce((acc, item) => {
+    acc.debt += item.debtDzd;
+    acc.paid += item.paidDzd;
+    acc.balance += item.balanceDzd;
+    return acc;
+  }, { debt: 0, paid: 0, balance: 0 });
+  assert.equal(totals.balance, totals.debt - totals.paid);
+});
+
+test("analytics do not count duplicate synced events twice", () => {
+  const summaries = summarizeCustomerBalances([debt, payment, debt, payment]);
+  assert.equal(summaries.get("cust-1").debtDzd, 1200);
+  assert.equal(summaries.get("cust-1").paidDzd, 300);
+  assert.equal(summaries.get("cust-1").balanceDzd, 900);
 });
