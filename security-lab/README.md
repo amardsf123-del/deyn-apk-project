@@ -7,7 +7,9 @@ This branch is an isolated preparation area. Nothing here is included in either 
 - The v2 Ed25519 prototype has passed local tests with a temporary test keypair only.
 - The configured public key is `GGV7VOrfbHEBHxS/wzJ7OeZsBc2Jx013mPZT5s4GML4=`.
 - The corresponding production private PEM has not been recovered. Never commit or upload a private signing key.
-- Trusted-time service is not deployed or configured.
+- A Cloudflare Worker signed-time template has been added under `security-lab/trusted-time-worker/`.
+- Its JavaScript syntax check passed, and 3 local tests passed: valid Ed25519 signature + nonce binding, malformed nonce rejection, and missing-secret fail-closed behavior.
+- Trusted-time service is not deployed or configured; no endpoint or production key exists.
 - No APK from this branch should be distributed.
 
 ## Why this is separate
