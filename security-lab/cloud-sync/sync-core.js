@@ -5,14 +5,14 @@
 const ROLES = new Set(["owner", "worker"]);
 const ACTIONS = new Set([
   "read", "createCustomer", "addDebt", "addPayment",
-  "editCustomer", "deleteCustomer", "editLedgerEntry", "deleteLedgerEntry"
+  "editCustomer", "deleteCustomer", "editLedgerEntry", "deleteLedgerEntry", "reverseLedgerEntry"
 ]);
 
 const WORKER_ACTIONS = new Set(["read", "createCustomer", "addDebt", "addPayment"]);
 
 export function authorize(role, action) {
   if (!ROLES.has(role) || !ACTIONS.has(action)) return false;
-  if (role === "owner") return true;
+  if (role === "owner") return action !== "editLedgerEntry" && action !== "deleteLedgerEntry";
   return WORKER_ACTIONS.has(action);
 }
 
