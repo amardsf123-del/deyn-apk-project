@@ -134,7 +134,7 @@ test("accepts PKCS8 PEM private key and standard base64 public key inputs", asyn
   const publicRaw = new Uint8Array(await webcrypto.subtle.exportKey("raw", pair.publicKey));
   const toB64 = bytes => Buffer.from(bytes).toString("base64");
   const pem = "-----BEGIN PRIVATE KEY-----\\n" +
-    toB64(privateDer).match(/.{1,64}/g).join("\\n") +
+    toB64(privateDer).match(/.{1,64}/g).join("\n") +
     "\\n-----END PRIVATE KEY-----";
   const code = await issueLicense({
     privateKeyPkcs8: pem, deviceId: "ab".repeat(16), tier: "1Y",
