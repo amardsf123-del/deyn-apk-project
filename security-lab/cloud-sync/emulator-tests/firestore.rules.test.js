@@ -191,3 +191,54 @@ test("ledger writes require an existing customer and positive integer amount", a
     actorUid: "worker-1"
   }));
 });
+
+test("owner can archive a customer without deleting the debt history", async () => {
+  const db = authDb("owner-1", "owner");
+  await assertSucceeds(updateDoc(doc(db, customerPath()), {
+    archivedAt: now,
+    revision: 2
+  }));
+  await assertSucceeds(getDoc(doc(db, customerPath())));
+});
+
+test("worker cannot read or alter shop membership and device records", async () => {
+  const db = authDb("worker-1");
+  await assertFails(getDoc(doc(db, path("members/owner-1"))));
+  await assertFails(updateDoc(doc(db, path("members/worker-1")), { role: "owner" }));
+  await assertFails(updateDoc(doc(db, path(`devices/${deviceDocId("worker-1")}`)), {
+    role: "owner"
+  }));
+});
+
+test("ledger rejects future timestamps and mismatched device identity", async () => {
+  const db = authDb("worker-1");
+  const base = {
+    shopId,
+    customerId: "customer-1",
+    kind: "debt",
+    amountDzd: 250,
+    createdAtMs: now,
+    deviceId,
+    actorUid: "worker-1"
+  };
+  await assertFails(setDoc(doc(db, ledgerPath("future-event")), {
+    ...base,
+    eventId: "future-event",
+    createdAtMs: now + 24 * 60 * 60 * 1000
+  }));
+  await assertFails(setDoc(doc(db, ledgerPath("wrong-device-event")), {
+    ...base,
+    eventId: "wrong-device-event",
+    deviceId: "B".repeat(32)
+  }));
+});
+
+test("client cannot write shop subscription or invitation records", async () => {
+  const db = authDb("owner-1", "owner");
+  await assertFails(updateDoc(doc(db, `shops/${shopId}`), {
+    subscriptionExpiresAtMs: now + 10 * 365 * 24 * 60 * 60 * 1000
+  }));
+  await assertFails(setDoc(doc(db, path("invitations/fake")), {
+    status: "pending", role: "worker"
+  }));
+});
