@@ -63,6 +63,31 @@ service cloud.firestore {
       return belongsToShop(shopId) && request.auth.token.memberRole == "worker";
     }
 
+    function validCustomer(data, customerId) {
+      return data.keys().hasOnly([
+          "id", "shopId", "name", "phone", "segment",
+          "creditCeilingCentimes", "payDay", "revision",
+          "archivedAt", "createdAtMs"
+        ])
+        && data.keys().hasAll([
+          "id", "shopId", "name", "phone", "segment",
+          "creditCeilingCentimes", "payDay", "revision",
+          "archivedAt", "createdAtMs"
+        ])
+        && data.id == customerId
+        && data.shopId is string
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+        && data.phone is string && data.phone.size() <= 32
+        && data.segment is string && data.segment.size() <= 32
+        && data.creditCeilingCentimes is int
+        && data.creditCeilingCentimes >= 0
+        && data.creditCeilingCentimes <= 9007199254740991
+        && (data.payDay == null || (data.payDay is int && data.payDay >= 1 && data.payDay <= 31))
+        && data.revision is int && data.revision >= 1
+        && (data.archivedAt == null || (data.archivedAt is int && data.archivedAt > 0))
+        && data.createdAtMs is int && data.createdAtMs > 0;
+    }
+
     match /shops/{shopId} {
       allow read: if belongsToShop(shopId);
       allow write: if false;
@@ -70,10 +95,16 @@ service cloud.firestore {
       match /customers/{customerId} {
         allow read: if belongsToShop(shopId);
         allow create: if (isOwner(shopId) || isWorker(shopId))
-          && request.resource.data.shopId == shopId;
+          && validCustomer(request.resource.data, customerId)
+          && request.resource.data.shopId == shopId
+          && request.resource.data.revision == 1
+          && request.resource.data.archivedAt == null
+          && request.resource.data.createdAtMs <= request.time.toMillis() + 300000;
         allow update: if isOwner(shopId)
+          && validCustomer(request.resource.data, customerId)
           && request.resource.data.shopId == resource.data.shopId
           && request.resource.data.id == resource.data.id
+          && request.resource.data.createdAtMs == resource.data.createdAtMs
           && request.resource.data.revision == resource.data.revision + 1;
         // Archive is an owner-only field update; hard delete is never allowed.
         allow delete: if false;
