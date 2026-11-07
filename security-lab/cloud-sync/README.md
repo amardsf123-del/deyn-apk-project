@@ -1,71 +1,78 @@
 # DEYN cloud sync — isolated prototype
 
-**Status: architecture + emulator-tested backend prototype. Not deployed and not connected to the app or a live Firebase project.**
+**Status: architecture and backend prototype are emulator-tested. Nothing is deployed or connected to the DEYN APK.**
 
-This branch deliberately does not change `main`, the current APK, the DEYN2 license path, demo data, Settings reset, owner password, or existing owner/worker screens.
+All work remains on `cloud-sync-lab`; `main`, the current APK, DEYN2 licensing, demo data, Settings reset, owner password `fcb1899`, and current owner/worker UI remain unchanged.
 
-## Chosen direction
+## Architecture and permissions
 
-Use Firebase Authentication + Cloud Firestore, with one `shopId` for each shop and a separate device identity for every physical phone. The owner phone and worker phone must never share or clone a device ID. Both devices belong to the same shop and subscription, while each device has its own enrollment and role.
+Firebase Authentication + Cloud Firestore, one `shopId` per shop, and one random 128-bit device ID per physical phone.
 
-- Owner: full shop permissions.
-- Worker: read customers, create customers, add debt and payment entries; cannot edit/archive customer profiles or change/delete ledger entries.
-- Owner can edit/archive customer profiles, but debt/payment history remains append-only; corrections should use compensating entries.
-- Owner recovery on another phone requires the primary owner to sign in again and pass recent authentication. It does not clone the old device ID or erase the worker's enrollment on that phone.
-- Subscription expiry belongs to the shop subscription, not a single device.
-- Customer balances are derived from immutable debt/payment events, with every DZD amount stored as integer centimes.
-- Event IDs are unique and idempotent; reusing an ID with different content is rejected. Legacy transaction IDs are deterministically namespaced by device and customer.
-- Customer profile edits use revisions to reject stale overwrites.
-- No arbitrary fixed customer-count ceiling is introduced.
+- Owner: read/create customers, add debt/payment, edit and archive customer profiles, manage workers and devices.
+- Worker: read customers, create customers, add debt/payment only.
+- Both roles: ledger is append-only; corrections must be represented as compensating entries, not edits/deletes.
+- Customer deletion is a soft archive; debt history remains.
+- Balances are derived from unique immutable events.
+- All money is stored as integer `amountCentimes` (not floating-point DZD). The current app's DZD decimal amounts convert to centimes during migration.
+- Profile revisions prevent stale edits from silently overwriting newer changes.
+- Current shop limit: two unique physical device IDs. Owner and worker enrollment records on the same phone share one device ID and count as one physical device.
 
-## Implemented isolated backend
+## Trusted backend now implemented in the lab
 
-The `functions/` package now contains Firebase callable backend prototypes, and `legacy-migration.js` maps the existing `deyn.v1` local data model into safe cloud records. Migration requires explicit real-data confirmation and excludes pending tickets, trash/demo snapshots, local passwords, license records, and settings.
+The `functions/` package uses Firebase Admin SDK 14.5 and Cloud Functions SDK 7.3.
 
-- Provision a shop and initial owner device enrollment only through a trusted platform administrator after purchase/activation approval; ordinary users cannot create themselves an unlimited subscription.
-- Register another owner device after recent owner re-authentication.
-- Create expiring, email-bound, single-use worker invitations.
-- Redeem an invitation using one Firestore transaction that consumes the invite and registers the worker membership/device.
-- Mint device-specific Firebase custom-token sessions after checking authoritative records.
-- Revoke one device or deactivate a worker membership.
+1. **Shop provisioning:** only a verified platform administrator can provision a shop after payment approval, for a customer Firebase UID + verified email. The operation creates the shop, owner membership and a private `users/{uid}/shops/{shopId}` index. It does not register a phone or return the owner's token to the operator.
+2. **Owner first phone:** owner signs into their own account, discovers their shop ID through their private shop index, then calls `enrollOwnerDevice`. The backend checks recent re-authentication and returns a per-device custom token.
+3. **Worker invitation:** owner creates a hashed, email-bound, expiring, single-use secret. Worker redeems it while signed in with a verified email. One Firestore transaction consumes the invitation and creates member, device and user-shop index records.
+4. **Owner recovery:** owner signs into their own account on the worker's phone and registers the same physical device ID under the owner UID. The worker enrollment remains separate. It counts as the same physical phone.
+5. **Sessions and revocation:** backend mints custom tokens with per-session claims `shopId`, `memberRole`, `deviceId`. Owner can revoke a device or deactivate a worker; deactivation revokes all that worker's enrollments.
+6. **Subscription administration:** only platform admin can update shop expiry; each change is written to a subscription audit subcollection. Clients cannot edit the shop record.
+7. **Platform admin bootstrap:** guarded script in `functions/scripts/set-platform-admin.js`; requires a verified matching email, Firebase Admin credentials in a trusted environment and explicit confirmation. No credentials are in the repository.
 
-**Important identity detail:** Firebase user-level custom claims are global to a UID. A user may use several physical phones, so storing one device ID in global user claims would break multi-device sessions. The prototype uses a Firebase custom token with per-session claims (`shopId`, `memberRole`, `deviceId`) after server-side validation.
+Firebase user's ordinary custom claims are global to that UID, so they are not used for the device ID. Device-specific claims are issued in each Firebase custom token session. App Check is required on callable endpoints.
 
-App Check is enforced on callable endpoints. Worker invitations require a verified email. The invitation secret is returned once; only its SHA-256 hash is stored. Concurrent redemption attempts are tested to ensure only one succeeds.
+## Exact existing-app migration
+
+The recovered current app uses `localStorage['deyn.v1']`:
+- customer profiles have `id`, `name`, `phone`, `seg`, `ceiling`, `payDay`, and `tx[]`.
+- transactions contain `id`, `type` (`debt` / `pay`), `amount`, `note`, and `ts`.
+- pending tickets are not debts until assigned to a customer.
+- trash can include deleted customers and a full bulk-reset snapshot.
+- auth contains the factory password, local passwords and license/device state.
+
+The new `legacy-migration.js` maps only active customer profiles and their `tx[]` records. It converts DZD decimals to integer centimes and creates stable event IDs namespaced by device + customer + old transaction ID. It requires explicit `confirmedRealData: true` and never includes pending tickets, trash/demo snapshots, auth/passwords, licenses or settings.
+
+Read [LEGACY_DATA_MAPPING.md](./LEGACY_DATA_MAPPING.md) and [CLIENT_INTEGRATION_PLAN.md](./CLIENT_INTEGRATION_PLAN.md) for the complete migration and app-side contracts. No migration runs at startup. First sync must show record counts and require owner confirmation; sample demo records must never be uploaded automatically.
 
 ## Automated verification
 
-Latest passing workflow: [42382365427](https://github.com/amardsf123-del/deyn-apk-project/actions/runs/42382365427).
+Latest full CI run: [42384170169](https://github.com/amardsf123-del/deyn-apk-project/actions/runs/42384170169).
 
 | Test group | Passed | Failed |
 |---|---:|---:|
-| Existing security and sync logic + legacy migration | 116 | 0 |
-| Firestore Security Rules emulator | 15 | 0 |
-| Backend membership transactions | 13 | 0 |
-| Capacitor 8 bridge dependency resolution | passed | 0 |\n| **Total tests** | **144** | **0** |
+| Security, sync logic and legacy migration | 116 | 0 |
+| Firestore Security Rules emulator | 18 | 0 |
+| Membership/backend transaction tests | 17 | 0 |
+| **Total** | **151** | **0** |
 
-Rules tests cover worker permissions, owner profile revisions/archive, append-only ledger, forged role, cross-shop isolation, expired subscriptions, protected shop/invitation metadata, invalid timestamps and device mismatches.
+Coverage includes invitation race/replay, wrong and unverified email, owner identity verification, shop provisioning, owner recovery on worker phone, physical device cap, device/member revocation, subscription renewal audit, customer profile validation, centime arithmetic, demo-data exclusion, and 600-customer analytics.
 
-Backend tests cover shop creation, second owner device enrollment, email-bound invitation, single-use and concurrent redemption, expiry, forged owner session, worker deactivation, device revocation, and session issuance.
+The Capacitor 8 Firebase plugin + secure-storage dependency graph also resolves in CI. Its isolated package uses a patched gRPC transport override; the latest bridge-package npm audit reports zero vulnerabilities. The backend dependency tree currently reports six moderate transitive advisories with non-breaking fixes available; CI now runs `npm audit fix` before the audit and tests. This is separate from the test pass count.
 
-These tests run against Firebase Emulator, not a deployed project. They validate the tested cases, not production account configuration or Android integration.
+These are emulator and dependency-resolution tests, not production deployment or Android physical-device tests.
 
-## Offline behavior
+## Capacitor and offline decision
 
-The intended Android app must keep a local working copy, queue writes while disconnected, and reconcile when online. The current DEYN app is a Capacitor/WebView app, so the exact native Firestore bridge and persistence behavior must be selected and verified on the actual Android WebView/device. Do not assume browser IndexedDB persistence is equivalent to native Android persistence.
+The recovered app currently uses Capacitor 7 and secure-storage plugin 0.11.x. The maintained Firebase Capacitor plugin line is 8.x for Capacitor 8; the 7.x plugin line is deprecated. The isolated test resolves Firebase plugins 8.6.0 with Capacitor 8 and secure-storage 0.13.0. Do not upgrade the production app until a complete Android build and license-storage test passes.
 
-Offline changes are provisional until the backend accepts them. The UI must distinguish **saved on this phone / waiting to sync** from **synced to the shop account**. The app must not present offline role checks as server authorization.
+Native Firestore Android persistence must be enabled before any Firestore calls and tested on two real phones, including airplane mode, force-stop/restart, retries, duplicate sync, owner recovery and subscription expiry. The current outbox helper remains in-memory logic; a durable native queue and app integration are still required.
 
-## Still required before a real shop is connected
+## Deployment readiness
 
-1. Create a Firebase project owned by the business, enable Authentication + Firestore, configure App Check, and set the required deployment region/billing.
-2. Review and deploy the callable backend and Firestore rules using the user's own Firebase project; no project credentials are present in this repo.
-3. Integrate the client sign-in-with-custom-token flow and native Firestore persistence/bridge into the actual DEYN app.
-4. Migrate existing local DEYN data without deleting/replacing legacy keys. Preserve demo data and Settings reset; never upload demo records as a real shop.
-5. Test two actual phones, offline writes, force-stop/restart, reconnect/retries, simultaneous profile edits, backups, owner-phone loss and subscription expiry.
-6. Test 500+ real-shaped customers on target phones and verify search/analytics responsiveness.
-7. Only then build and test a release APK. Never commit service-account keys, signing keys or secrets.
+A manual workflow exists at `.github/workflows/deploy-deyn-cloud-sync.yml`. It requires GitHub Actions secrets:
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_SERVICE_ACCOUNT_JSON`
 
-## Current limitations
+The workflow is manual only and requires typing `DEPLOY`. No Firebase project or credentials are currently configured. Do not run deployment until the customer Firebase project, Authentication, Firestore, App Check, billing/region, and Android app configuration have been created and reviewed.
 
-There is no live Firebase project, deployed backend, sync endpoint, or app integration. No real customer data is transmitted. Subscription payment/renewal administration and account deletion are not implemented. The outbox helper is still in-memory logic; durable offline storage requires a native adapter. The app-side Capacitor 8 upgrade and native Firebase plugin build/runtime tests are still pending. The recovered app uses Capacitor 7. An isolated dependency-resolution check now tests the maintained Capacitor 8 Firebase plugin set with the matching secure-storage version; this is not yet an Android runtime test. The app source on `main` remains unchanged.
+Still pending: payment-provider integration, customer app custom-token sign-in, native Firestore bridge, durable offline outbox, app-side sync UI, actual data migration on a copy, Android builds and two-phone tests. No real customer data is being transmitted.
