@@ -60,8 +60,13 @@ async function seed({ expiresAt = now + 60 * 60 * 1000 } = {}) {
       id: "customer-1",
       shopId,
       name: "Test customer",
+      phone: "0555000000",
+      segment: "daily",
+      creditCeilingCentimes: 0,
+      payDay: null,
       revision: 1,
-      archivedAt: null
+      archivedAt: null,
+      createdAtMs: now
     });
     for (const [uid, role] of [["owner-1", "owner"], ["worker-1", "worker"]]) {
       await setDoc(doc(db, `users/${uid}/shops/${shopId}`), {
@@ -92,7 +97,9 @@ test("worker can read customers and create a customer", async () => {
   const db = authDb("worker-1");
   await assertSucceeds(getDoc(doc(db, customerPath())));
   await assertSucceeds(setDoc(doc(db, customerPath("customer-2")), {
-    id: "customer-2", shopId, name: "New customer", revision: 1, archivedAt: null
+    id: "customer-2", shopId, name: "New customer", phone: "0555111111",
+    segment: "daily", creditCeilingCentimes: 0, payDay: null,
+    revision: 1, archivedAt: null, createdAtMs: now
   }));
 });
 
@@ -258,5 +265,24 @@ test("users can discover only their own shop index records", async () => {
   await assertFails(getDoc(doc(workerDb, `users/owner-1/shops/${shopId}`)));
   await assertFails(updateDoc(doc(workerDb, `users/worker-1/shops/${shopId}`), {
     role: "owner"
+  }));
+});
+
+test("customer creation rejects incomplete profiles and pre-archived records", async () => {
+  const db = authDb("worker-1");
+  await assertFails(setDoc(doc(db, customerPath("bad-customer")), {
+    id: "bad-customer", shopId, name: "Bad customer", revision: 1, archivedAt: null
+  }));
+  await assertFails(setDoc(doc(db, customerPath("archived-at-create")), {
+    id: "archived-at-create", shopId, name: "Archived", phone: "",
+    segment: "daily", creditCeilingCentimes: 0, payDay: null,
+    revision: 1, archivedAt: now, createdAtMs: now
+  }));
+});
+
+test("owner cannot rewrite a customer's immutable creation timestamp", async () => {
+  const db = authDb("owner-1", "owner");
+  await assertFails(updateDoc(doc(db, customerPath()), {
+    name: "Tampered timestamp", revision: 2, createdAtMs: now + 1
   }));
 });
