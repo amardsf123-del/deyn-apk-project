@@ -142,7 +142,12 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
       if (shop.ownerUid !== uid || !member || member.role !== "owner" || member.status !== "active") {
         fail("permission-denied");
       }
-      if (dSnap.exists && dSnap.data().status !== "active") fail("permission-denied");
+      if (dSnap.exists) {
+        const existingDevice = dSnap.data();
+        if (existingDevice.status !== "active" || existingDevice.uid !== uid ||
+            existingDevice.shopId !== shopId || existingDevice.deviceId !== deviceId ||
+            existingDevice.role !== "owner") fail("permission-denied");
+      }
       const alreadyEnrolledPhysicalDevice = devicesSnap.docs.some((item) =>
         item.data().deviceId === deviceId && item.data().status === "active"
       );
@@ -256,8 +261,12 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
     const member = mSnap.exists ? mSnap.data() : null;
     const device = dSnap.exists ? dSnap.data() : null;
     assertActiveShop(shop, nowMs);
-    if (!member || member.status !== "active" || !device || device.status !== "active" ||
-        device.role !== member.role) fail("permission-denied");
+    if (!member || member.uid !== uid || member.shopId !== shopId ||
+        member.status !== "active" || !device || device.uid !== uid ||
+        device.shopId !== shopId || device.deviceId !== deviceId ||
+        device.status !== "active" || device.role !== member.role ||
+        (member.role === "owner" && shop.ownerUid !== uid) ||
+        !["owner", "worker"].includes(member.role)) fail("permission-denied");
     const customToken = await authAdmin.createCustomToken(uid, sessionClaims(shopId, member.role, deviceId));
     return { shopId, deviceId, role: member.role, customToken };
   }
