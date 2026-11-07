@@ -105,6 +105,10 @@ test("owner invitation is hashed in storage and redeemed once by verified target
     shopId, invitationSecret: invitation.invitationSecret, deviceId: workerDevice
   });
   assert.equal(redeemed.role, "worker");
+  const workerShopPointer = await db.collection("users").doc("worker-uid-0002")
+    .collection("shops").doc(shopId).get();
+  assert.equal(workerShopPointer.data().role, "worker");
+  assert.equal(workerShopPointer.data().status, "active");
   const used = await invitationDoc.ref.get();
   assert.equal(used.data().status, "used");
   await assert.rejects(
@@ -251,6 +255,9 @@ test("owner can deactivate a worker membership and block future sessions", async
     claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
     targetUid: "worker-uid-0002"
   });
+  const workerShopPointer = await db.collection("users").doc("worker-uid-0002")
+    .collection("shops").doc(shopId).get();
+  assert.equal(workerShopPointer.data().status, "inactive");
   await assert.rejects(service.issueDeviceSession({
     uid: "worker-uid-0002", shopId, deviceId: workerDevice
   }), /permission-denied/);
