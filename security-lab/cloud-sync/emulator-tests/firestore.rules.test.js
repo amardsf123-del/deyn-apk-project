@@ -98,7 +98,7 @@ test("worker can append a debt or payment event", async () => {
     shopId,
     customerId: "customer-1",
     kind: "debt",
-    amountDzd: 1500,
+    amountCentimes: 1500,
     createdAtMs: now,
     deviceId,
     actorUid: "worker-1"
@@ -121,12 +121,12 @@ test("ledger events are append-only for workers and owners", async () => {
     shopId,
     customerId: "customer-1",
     kind: "payment",
-    amountDzd: 500,
+    amountCentimes: 500,
     createdAtMs: now,
     deviceId,
     actorUid: "owner-1"
   }));
-  await assertFails(updateDoc(doc(ownerDb, ledgerPath()), { amountDzd: 1 }));
+  await assertFails(updateDoc(doc(ownerDb, ledgerPath()), { amountCentimes: 1 }));
   await assertFails(deleteDoc(doc(ownerDb, ledgerPath())));
 });
 
@@ -175,7 +175,7 @@ test("ledger writes require an existing customer and positive integer amount", a
     shopId,
     customerId: "does-not-exist",
     kind: "debt",
-    amountDzd: 100,
+    amountCentimes: 100,
     createdAtMs: now,
     deviceId,
     actorUid: "worker-1"
@@ -185,7 +185,7 @@ test("ledger writes require an existing customer and positive integer amount", a
     shopId,
     customerId: "customer-1",
     kind: "debt",
-    amountDzd: -5,
+    amountCentimes: -5,
     createdAtMs: now,
     deviceId,
     actorUid: "worker-1"
@@ -216,7 +216,7 @@ test("ledger rejects future timestamps and mismatched device identity", async ()
     shopId,
     customerId: "customer-1",
     kind: "debt",
-    amountDzd: 250,
+    amountCentimes: 250,
     createdAtMs: now,
     deviceId,
     actorUid: "worker-1"
