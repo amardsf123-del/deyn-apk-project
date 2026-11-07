@@ -24,7 +24,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - uses: android-actions/setup-android@v3
+      - name: Confirm preinstalled Android SDK
+        run: |
+          SDK_PATH="\u0024{ANDROID_SDK_ROOT:-\u0024{ANDROID_HOME:-}}"
+          test -n "\u0024SDK_PATH"
+          echo "ANDROID_HOME=\u0024SDK_PATH" >> "\u0024GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=\u0024SDK_PATH" >> "\u0024GITHUB_ENV"
+          test -d "\u0024SDK_PATH/platforms"
       - name: Install Capacitor dependencies
         working-directory: security-lab/licensing-v3/keygen-v3-app
         run: npm install --no-audit --no-fund
