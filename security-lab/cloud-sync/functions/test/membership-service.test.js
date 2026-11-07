@@ -41,24 +41,44 @@ async function clearShop() {
     await batch.commit();
   }
   await ref.delete().catch(() => {});
+  await db.collection("users").doc("owner-uid-0001").collection("shops").doc(shopId).delete().catch(() => {});
+  await db.collection("users").doc("worker-uid-0002").collection("shops").doc(shopId).delete().catch(() => {});
 }
 
-test("createShop creates owner membership and a device-bound owner session", async () => {
+async function setupShop() {
+  await service.createShop({ ownerUid: "owner-uid-0001" });
+  return service.enrollOwnerDevice({
+    uid: "owner-uid-0001", shopId, deviceId: ownerDevice,
+    authTime: Math.floor(clock / 1000)
+  });
+}
+
+test("shop provisioning creates owner membership, then owner enrolls their own device", async () => {
   await clearShop();
-  const result = await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  const result = await service.createShop({ ownerUid: "owner-uid-0001" });
   assert.equal(result.shopId, shopId);
-  assert.match(result.customToken, /^test-token-owner-uid-0001-owner-/);
+  assert.equal("customToken" in result, false);
   const shop = await db.collection("shops").doc(shopId).get();
   const member = await shop.ref.collection("members").doc("owner-uid-0001").get();
-  const device = await shop.ref.collection("devices").doc(ownerDevice + "__owner-uid-0001").get();
+  const deviceBeforeOwnerLogin = await shop.ref.collection("devices")
+    .doc(ownerDevice + "__owner-uid-0001").get();
   assert.equal(shop.data().ownerUid, "owner-uid-0001");
   assert.equal(member.data().role, "owner");
-  assert.equal(device.data().status, "active");
+  assert.equal(deviceBeforeOwnerLogin.exists, false);
+  const session = await service.enrollOwnerDevice({
+    uid: "owner-uid-0001", shopId, deviceId: ownerDevice,
+    authTime: Math.floor(clock / 1000)
+  });
+  assert.match(session.customToken, /^test-token-owner-uid-0001-owner-/);
+  const pointer = await db.collection("users").doc("owner-uid-0001")
+    .collection("shops").doc(shopId).get();
+  assert.equal(pointer.data().role, "owner");
+  assert.equal(pointer.data().status, "active");
 });
 
 test("owner recovery registers a second physical device without cloning IDs", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   const result = await service.enrollOwnerDevice({
     uid: "owner-uid-0001", shopId, deviceId: workerDevice,
     authTime: Math.floor(clock / 1000)
@@ -70,7 +90,7 @@ test("owner recovery registers a second physical device without cloning IDs", as
 
 test("owner invitation is hashed in storage and redeemed once by verified target email", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   const claims = { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice };
   const invitation = await service.createWorkerInvitation({
     claims, targetEmail: "Worker@Example.com"
@@ -98,7 +118,7 @@ test("owner invitation is hashed in storage and redeemed once by verified target
 
 test("invitation cannot be redeemed by another email or unverified account", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   const invitation = await service.createWorkerInvitation({
     claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
     targetEmail: "worker@example.com"
@@ -115,7 +135,7 @@ test("invitation cannot be redeemed by another email or unverified account", asy
 
 test("expired subscription prevents invitation creation and new enrollment", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   await db.collection("shops").doc(shopId).update({ subscriptionExpiresAtMs: clock - 1 });
   await assert.rejects(service.createWorkerInvitation({
     claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
@@ -125,7 +145,7 @@ test("expired subscription prevents invitation creation and new enrollment", asy
 
 test("recent owner authentication is required for owner recovery", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   await assert.rejects(service.enrollOwnerDevice({
     uid: "owner-uid-0001", shopId, deviceId: workerDevice,
     authTime: Math.floor((clock - 20 * 60 * 1000) / 1000)
@@ -134,7 +154,7 @@ test("recent owner authentication is required for owner recovery", async () => {
 
 test("worker cannot issue owner session for an unregistered or different device", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   const invitation = await service.createWorkerInvitation({
     claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
     targetEmail: "worker@example.com"
@@ -154,7 +174,7 @@ test("worker cannot issue owner session for an unregistered or different device"
 
 test("revoked device cannot obtain another session", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   await service.enrollOwnerDevice({
     uid: "owner-uid-0001", shopId, deviceId: workerDevice,
     authTime: Math.floor(clock / 1000)
@@ -170,7 +190,7 @@ test("revoked device cannot obtain another session", async () => {
 
 test("concurrent redemption can consume one invitation only once", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   const invitation = await service.createWorkerInvitation({
     claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
     targetEmail: "worker@example.com"
@@ -194,7 +214,7 @@ test("concurrent redemption can consume one invitation only once", async () => {
 
 test("expired worker invitation cannot be redeemed", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   const invitation = await service.createWorkerInvitation({
     claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
     targetEmail: "worker@example.com", expiresInMs: 60_000
@@ -209,7 +229,7 @@ test("expired worker invitation cannot be redeemed", async () => {
 
 test("forged owner claims cannot create worker invitations", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   await assert.rejects(service.createWorkerInvitation({
     claims: { uid: "worker-uid-0002", shopId, memberRole: "owner", deviceId: ownerDevice },
     targetEmail: "attacker@example.com"
@@ -218,7 +238,7 @@ test("forged owner claims cannot create worker invitations", async () => {
 
 test("owner can deactivate a worker membership and block future sessions", async () => {
   await clearShop();
-  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await setupShop();
   const invitation = await service.createWorkerInvitation({
     claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
     targetEmail: "worker@example.com"
