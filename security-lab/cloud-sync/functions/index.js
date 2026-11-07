@@ -32,6 +32,7 @@ function wrap(handler) {
 const options = { region: "me-central1", enforceAppCheck: true };
 
 export const createShop = onCall(options, wrap(async (request) => {
+  if (request.auth.token.email_verified !== true) throw new HttpsError("permission-denied", "verified-email-required");
   return service.createShop({
     uid: request.auth.uid,
     deviceId: request.data?.deviceId,
@@ -40,6 +41,7 @@ export const createShop = onCall(options, wrap(async (request) => {
 }));
 
 export const enrollOwnerDevice = onCall(options, wrap(async (request) => {
+  if (request.auth.token.email_verified !== true) throw new HttpsError("permission-denied", "verified-email-required");
   return service.enrollOwnerDevice({
     uid: request.auth.uid,
     shopId: request.data?.shopId,
