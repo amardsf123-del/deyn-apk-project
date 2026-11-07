@@ -1,10 +1,11 @@
-name: DEYN storage safety patch and Android test build
+name: DEYN Ed25519 protection and Android test build
 
 on:
   push:
     branches: [fix/storage-safety-2026-11]
     paths:
       - 'scripts/apply-storage-safety.py'
+      - 'scripts/apply-ed25519.py.z.b64'
       - '.github/workflows/fix-storage-safety.yml'
   workflow_dispatch:
 
@@ -28,15 +29,33 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - name: Apply guarded source patch and syntax checks
+      - name: Apply local-storage safety guard
         run: python scripts/apply-storage-safety.py
+      - name: Integrate Ed25519 signing and verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/deyn-check
+          unzip -q deyn-apk-project.zip -d /tmp/deyn-check
+          if ! grep -q 'var DEYN_PUBLIC_KEY' /tmp/deyn-check/deyn-app/www/index.html; then
+            python - <<'PY'
+            import base64, zlib
+            from pathlib import Path
+            payload = Path('scripts/apply-ed25519.py.z.b64').read_text().strip()
+            Path('scripts/apply-ed25519.py').write_bytes(zlib.decompress(base64.b64decode(payload)))
+            PY
+            python scripts/apply-ed25519.py
+          else
+            echo "Ed25519 already integrated; checking the existing source."
+            ! grep -q 'DEYN_OFFLINE_SECRET' /tmp/deyn-check/deyn-app/www/index.html
+          fi
       - name: Commit updated application archive
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add deyn-apk-project.zip
           if ! git diff --cached --quiet; then
-            git commit -m "Protect DEYN local data from silent storage failures"
+            git commit -m "Integrate Ed25519 signed device-bound DEYN licenses"
             git push
           fi
       - name: Build DEYN and key generator debug APKs
@@ -57,7 +76,7 @@ jobs:
       - name: Upload Android debug APKs for testing only
         uses: actions/upload-artifact@v4
         with:
-          name: DEYN-storage-safety-debug-apks
+          name: DEYN-ed25519-debug-apks
           path: |
             source/deyn-app/android/app/build/outputs/apk/debug/*.apk
             source/deyn-keygen/android/app/build/outputs/apk/debug/*.apk
