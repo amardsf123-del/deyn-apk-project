@@ -88,3 +88,13 @@ The old app and key generator share an embedded HMAC secret. Replacing that syst
 - Added `recovery-mode/SETTINGS_RESET_BEHAVIOR_AUDIT.md` and 5 compatibility tests. All 5 tests passed locally: fresh install, existing demo data, intentional Settings reset with a bulk-trash record, valid empty state without trash, and damaged existing data.
 - The demo seed and existing Settings reset/trash behavior must remain unchanged. The guard is only for an existing unreadable/invalid stored record or unavailable storage.
 - No app source, production ZIP, APK, or `main` branch was changed.
+
+
+## Read-only backup validator prototype (2026-11-07)
+- Added `backup-validator/backup-validator.js`, its Node tests, and a README.
+- Accepts the current legacy raw full-state JSON when the required `customers` and `pending` arrays are present; if `trash` exists it must be an array.
+- Also validates a proposed versioned `DEYN_BACKUP` v1 envelope and checks its canonical SHA-256 digest.
+- Preview reports customer, pending-ticket, and trash counts, plus whether auth/settings fields exist. It does not guess transaction counts because all transaction variants have not been fully mapped.
+- Unknown fields, auth fields (including `fcb1899` if present), and bulk trash are preserved unchanged. Empty active arrays remain valid after the intentional Settings reset.
+- 11 Node tests passed locally, covering legacy/versioned files, preservation, empty/reset states, malformed inputs, wrong versions, tampering, and fail-closed digest behavior.
+- This is read-only prototype code only. It does not import/restore, write app storage, change the existing backup button, or modify production source/APK/`main`. Android WebView testing and a transactional restore design remain required.
