@@ -15,6 +15,18 @@ export function assertPlatformAdmin(claims) {
   return true;
 }
 
+export async function assertVerifiedOwnerAccount(authAdmin, ownerUid, ownerEmail) {
+  if (typeof ownerUid !== "string" || ownerUid.length < 6 ||
+      typeof ownerEmail !== "string" || !EMAIL_RE.test(ownerEmail.trim())) {
+    fail("invalid-argument");
+  }
+  const user = await authAdmin.getUser(ownerUid);
+  if (user.emailVerified !== true || user.email?.toLowerCase() !== ownerEmail.trim().toLowerCase()) {
+    fail("permission-denied");
+  }
+  return user;
+}
+
 export function hashInvitationSecret(secret) {
   return createHash("sha256").update(secret, "utf8").digest("hex");
 }
