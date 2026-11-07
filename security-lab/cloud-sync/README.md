@@ -9,7 +9,7 @@ This branch deliberately does not change `main`, the current APK, the DEYN2 lice
 Use Firebase Authentication + Cloud Firestore, with one `shopId` for each shop and a separate device identity for every phone. The owner phone and worker phone must never share or clone a device ID. Both devices belong to the same shop and subscription, while each device has its own activation record and role.
 
 - Owner device: full shop permissions.
-- Worker device: read customers, create customers, add debt and payment entries; cannot edit/delete customers or change/delete ledger entries.
+- Worker device: read customers, create customers, add debt and payment entries; cannot edit/archive customers or change/delete ledger entries.\n- Owner can edit customer profiles and archive customers, but debt/payment history remains append-only for auditability; corrections should be represented by new compensating entries rather than erasing history.
 - Owner recovery on the worker phone: a verified owner sign-in/elevation flow changes the permission session on that phone. It does not clone the owner's device ID or erase the worker's enrollment.
 - Subscription expiry belongs to the shop subscription; per-device licenses reference the same shop subscription end date.
 - Customer balances are derived from immutable debt/payment events, not by syncing a mutable balance field.
