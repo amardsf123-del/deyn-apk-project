@@ -10,23 +10,23 @@ The recovered app package uses Capacitor 7:
 
 The current Firestore plugin 8.x line requires Capacitor 8; the plugin's 7.x line supports Capacitor 7 but is marked deprecated. Therefore, do not simply add the latest plugin to the current app. A deliberate Capacitor 8 upgrade and native build verification is the preferred long-term path, but it must be tested in an isolated app branch because it changes the native runtime and secure-storage plugin version as well.
 
-The current secure-storage plugin's release history identifies 0.11.x as its Capacitor 7 line and 0.13.x as its Capacitor 8 line. The current app must not be upgraded in place until the complete Android build and license storage tests pass.
+The current secure-storage plugin's release history identifies 0.11.x as its Capacitor 7 line and 0.13.x as its Capacitor 8 line. An isolated Capacitor 8 dependency-resolution check now installs the 8.6 Firebase plugins and secure-storage 0.13.0 together. The candidate bridge package reports zero npm audit vulnerabilities after pinning the transitive gRPC transport to a patched release. This is dependency validation only; it is not an Android build or runtime/offline test. The current app must not be upgraded in place until the complete Android build and license storage tests pass.
 
 ## Required client flow
 
 ### 1. First owner device / shop provisioning
 
 1. Owner account is authenticated with Firebase Authentication and verified email.
-2. Shop is provisioned only by the trusted platform administrator after purchase/license approval. The app cannot create a free or unlimited shop by setting its own expiry.
-3. Backend creates the owner member record and registers this physical phone's 128-bit device ID.
-4. Backend returns a device-scoped Firebase custom token.
-5. App signs in with that custom token; the session claims are `shopId`, `memberRole=owner`, and `deviceId`.
+2. The trusted platform administrator provisions the shop after purchase/license approval for the customer's verified Firebase UID and email. The operator receives only the shop ID; no owner session token is returned to the operator.
+3. The owner signs into their own account on their phone and reads the shop ID from their private `users/{uid}/shops` index.
+4. The owner app calls `enrollOwnerDevice` with that phone's 128-bit device ID after recent re-authentication.
+5. Backend registers the device and returns a device-scoped Firebase custom token. The app signs in with it; session claims are `shopId`, `memberRole=owner`, and `deviceId`.
 
 ### 2. Worker phone
 
 1. Owner creates a time-limited invitation for the worker's verified email.
 2. Worker signs in with their own Firebase account and redeems the invitation on their phone.
-3. Backend consumes the invitation and writes member + device records in one transaction.
+3. Backend consumes the invitation and writes member + device + private user-shop index records in one transaction.
 4. Backend returns a worker-scoped custom token; app signs in with it.
 5. Worker may read customers, create customers, add debt and add payment only.
 
@@ -43,6 +43,7 @@ The current secure-storage plugin's release history identifies 0.11.x as its Cap
 - At startup, app checks local enrollment and requests `issueDeviceSession` after authentication.
 - If a device is revoked or the worker membership is deactivated, server rules deny further reads/writes even if an old token remains on the device.
 - Client never writes member role, device status, subscription expiry, invitation status, or shop owner UID.
+- Current prototype limit: two unique physical device IDs per shop. Owner and worker enrollments on the same physical phone share that phone's device ID and count once. Revoking a worker account revokes all of that worker's device enrollments.
 
 ## Data synchronization contract
 
@@ -67,6 +68,8 @@ The Android app must use a native Firestore SDK bridge with persistence enabled 
 - subscription expiry while offline.
 
 The Firestore native Android SDK supports local persistence and queues writes while offline. Web-only IndexedDB persistence is not accepted as the sole proof for this Capacitor app. Do not clear Firestore persistence during normal sign-out or app lock; that would erase cached data and pending writes.
+
+See [LEGACY_DATA_MAPPING.md](./LEGACY_DATA_MAPPING.md) for the exact mapping from `deyn.v1`, centime conversion, stable migration IDs and fields that must never be uploaded.
 
 ## Local data and demo safety
 
