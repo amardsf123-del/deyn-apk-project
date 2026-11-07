@@ -23,6 +23,9 @@ The isolated Arabic UI is in `keygen-v3/index.html` and `keygen-v3/ui.js`.
 ## Version routing and migration
 `license-version-router.js` routes DEYN2 only to the legacy verifier and DEYN3 only to the v3 verifier. A rejected DEYN3 code never falls back to DEYN2. See `LICENSING_V2_TO_V3_MIGRATION_PLAN.md` before any integration; the plan preserves old device IDs and license records and requires separate v3 storage.
 
+## Fail-closed secure storage prototype
+`secure-license-store.js` is a separate lab-only adapter that requires the native Android plugin, uses a v3 namespace, confirms writes by exact readback, and never falls back to localStorage. Its mock tests do not prove hardware-backed encryption or the behavior of the actual Capacitor plugin on the target phone. See `SECURE_LICENSE_STORAGE_PROTOTYPE.md`.
+
 ## Key handling
 The app receives only the raw public key. The issuer receives the PKCS#8 private key at runtime. Never commit, bundle, or share the private key.
 
