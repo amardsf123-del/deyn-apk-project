@@ -16,10 +16,10 @@ This project tests whether the official Ouisync Kotlin/Android bindings can be e
 - Upstream: https://github.com/equalitie/ouisync
 - Kotlin bindings: https://docs.ouisync.net/kotlin/
 - License: MPL-2.0. Commercial use is permitted under the license; modifications to MPL-covered files must be made available under MPL when distributed. Preserve notices and review exact obligations before release.
-- Pinned Kotlin artifact version: `0.10.2-0`, derived from upstream Cargo workspace version `0.10.2` and Kotlin binding revision `0` at the inspected upstream source revision.
+- Pinned Kotlin artifact version: `0.10.0-0`, published upstream artifact version `0.10.0-0` and Kotlin binding revision `0` at the inspected upstream source revision.
 - Maven coordinates:
-  - `ie.equalit.ouinet:ouisync-session:0.10.2-0`
-  - `ie.equalit.ouinet:ouisync-service-android:0.10.2-0`
+  - `ie.equalit.ouinet:ouisync-session:0.10.0-0`
+  - `ie.equalit.ouinet:ouisync-service-android:0.10.0-0`
 
 ## Local-only configuration in this POC
 
