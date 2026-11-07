@@ -2,7 +2,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { assertPlatformAdmin, createMembershipService, hashInvitationSecret } from "../membership-service.js";
+import { assertPlatformAdmin, assertVerifiedOwnerAccount, createMembershipService, hashInvitationSecret } from "../membership-service.js";
 
 const projectId = "demo-deyn-sync";
 const app = initializeApp({ projectId }, "deyn-membership-tests");
@@ -287,4 +287,17 @@ test("trusted subscription renewal updates shop expiry and writes an audit recor
   assert.equal(audit.size, 1);
   assert.equal(audit.docs[0].data().previousExpiryMs, null);
   assert.equal(audit.docs[0].data().newExpiryMs, nextExpiry);
+});
+
+test("shop provisioning requires an existing verified owner email that matches the account", async () => {
+  const auth = {
+    async getUser(uid) {
+      if (uid === "verified-owner") return { uid, email: "owner@example.com", emailVerified: true };
+      return { uid, email: "owner@example.com", emailVerified: false };
+    }
+  };
+  const user = await assertVerifiedOwnerAccount(auth, "verified-owner", "OWNER@example.com");
+  assert.equal(user.emailVerified, true);
+  await assert.rejects(assertVerifiedOwnerAccount(auth, "unverified-owner", "owner@example.com"), /permission-denied/);
+  await assert.rejects(assertVerifiedOwnerAccount(auth, "verified-owner", "attacker@example.com"), /permission-denied/);
 });
