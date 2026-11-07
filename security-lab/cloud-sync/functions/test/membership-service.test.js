@@ -268,9 +268,10 @@ test("owner can deactivate a worker membership and block future sessions", async
 });
 
 test("only a trusted platform administrator can provision new shops", () => {
-  assert.equal(assertPlatformAdmin({ platformAdmin: true }), true);
+  assert.equal(assertPlatformAdmin({ platformAdmin: true, email_verified: true }), true);
   assert.throws(() => assertPlatformAdmin({}), /permission-denied/);
-  assert.throws(() => assertPlatformAdmin({ platformAdmin: "true" }), /permission-denied/);
+  assert.throws(() => assertPlatformAdmin({ platformAdmin: "true", email_verified: true }), /permission-denied/);
+  assert.throws(() => assertPlatformAdmin({ platformAdmin: true, email_verified: false }), /permission-denied/);
 });
 
 test("trusted subscription renewal updates shop expiry and writes an audit record", async () => {
