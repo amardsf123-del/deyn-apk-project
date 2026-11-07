@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'deyn-apk-project.zip'
+      - '.github/build-now.txt'
 
 jobs:
   build:
