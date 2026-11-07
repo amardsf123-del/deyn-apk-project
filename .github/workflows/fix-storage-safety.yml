@@ -15,6 +15,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: deyn-ed25519-build
+  cancel-in-progress: true
+
 jobs:
   patch-and-build:
     runs-on: ubuntu-latest
@@ -97,7 +101,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add deyn-apk-project.zip
           if ! git diff --cached --quiet; then
-            git commit -m "Fix device ID layout and rotate DEYN Ed25519 key"
+            git commit -m "Fix device ID layout and PEM decoding"
+            git pull --rebase origin fix/storage-safety-2026-11
             git push
           fi
       - name: Build DEYN and key generator debug APKs
