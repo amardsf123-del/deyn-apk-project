@@ -13,14 +13,14 @@ Use Firebase Authentication + Cloud Firestore, with one `shopId` for each shop a
 - Owner can edit/archive customer profiles, but debt/payment history remains append-only; corrections should use compensating entries.
 - Owner recovery on another phone requires the primary owner to sign in again and pass recent authentication. It does not clone the old device ID or erase the worker's enrollment on that phone.
 - Subscription expiry belongs to the shop subscription, not a single device.
-- Customer balances are derived from immutable debt/payment events.
-- Event IDs are unique and idempotent; reusing an ID with different content is rejected.
+- Customer balances are derived from immutable debt/payment events, with every DZD amount stored as integer centimes.
+- Event IDs are unique and idempotent; reusing an ID with different content is rejected. Legacy transaction IDs are deterministically namespaced by device and customer.
 - Customer profile edits use revisions to reject stale overwrites.
 - No arbitrary fixed customer-count ceiling is introduced.
 
 ## Implemented isolated backend
 
-The `functions/` package now contains Firebase callable backend prototypes:
+The `functions/` package now contains Firebase callable backend prototypes, and `legacy-migration.js` maps the existing `deyn.v1` local data model into safe cloud records. Migration requires explicit real-data confirmation and excludes pending tickets, trash/demo snapshots, local passwords, license records, and settings.
 
 - Provision a shop and initial owner device enrollment only through a trusted platform administrator after purchase/activation approval; ordinary users cannot create themselves an unlimited subscription.
 - Register another owner device after recent owner re-authentication.
@@ -39,10 +39,10 @@ Latest passing workflow: [42382365427](https://github.com/amardsf123-del/deyn-ap
 
 | Test group | Passed | Failed |
 |---|---:|---:|
-| Existing security and sync logic | 109 | 0 |
+| Existing security and sync logic + legacy migration | 116 | 0 |
 | Firestore Security Rules emulator | 15 | 0 |
 | Backend membership transactions | 13 | 0 |
-| **Total** | **137** | **0** |
+| Capacitor 8 bridge dependency resolution | passed | 0 |\n| **Total tests** | **144** | **0** |
 
 Rules tests cover worker permissions, owner profile revisions/archive, append-only ledger, forged role, cross-shop isolation, expired subscriptions, protected shop/invitation metadata, invalid timestamps and device mismatches.
 
@@ -68,4 +68,4 @@ Offline changes are provisional until the backend accepts them. The UI must dist
 
 ## Current limitations
 
-There is no live Firebase project, deployed backend, sync endpoint, or app integration. No real customer data is transmitted. Subscription payment/renewal administration and account deletion are not implemented. The outbox helper is still in-memory logic; durable offline storage requires a native adapter. The app source on `main` remains unchanged.
+There is no live Firebase project, deployed backend, sync endpoint, or app integration. No real customer data is transmitted. Subscription payment/renewal administration and account deletion are not implemented. The outbox helper is still in-memory logic; durable offline storage requires a native adapter. The app-side Capacitor 8 upgrade and native Firebase plugin build/runtime tests are still pending. The recovered app uses Capacitor 7. An isolated dependency-resolution check now tests the maintained Capacitor 8 Firebase plugin set with the matching secure-storage version; this is not yet an Android runtime test. The app source on `main` remains unchanged.
