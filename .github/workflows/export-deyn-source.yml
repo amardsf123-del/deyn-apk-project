@@ -1,5 +1,6 @@
 name: DEYN source inspection bundle
 on:
+  workflow_dispatch:
   push:
     branches: [fix/storage-safety-2026-11]
     paths: ['.github/workflows/export-deyn-source.yml']
