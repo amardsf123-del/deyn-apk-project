@@ -55,3 +55,26 @@ The decoded payload contains `v`, `purpose`, `issuedAtMs`, `expiresAtMs`, and th
 - The app must not delete customer debt data or activation records when verification fails.
 - Add monitoring/rate controls before public production use.
 - No endpoint, keypair, account, or secret has been configured by this repository change.
+
+## Deployment workflow prepared
+
+A manual GitHub Actions deployment workflow is now present at
+`.github/workflows/deploy-deyn-time-worker.yml`. It does not deploy automatically
+and it does not contain credentials. Before running it, the repository owner must
+create these GitHub Actions repository secrets:
+
+- `CLOUDFLARE_API_TOKEN` — a Cloudflare API token with permission to deploy Workers.
+- `CLOUDFLARE_ACCOUNT_ID` — the owner-controlled Cloudflare account ID.
+- `TIME_SIGNING_PRIVATE_KEY_PKCS8_B64` — the base64-encoded PKCS#8 DER private key
+  belonging to this time service.
+
+The corresponding public key is safe to commit and is stored in
+`client/public-key.js`. The time-service private key is separate from the DEYN
+license-signing key and must never be committed or placed in either APK. The owner
+backup files are stored outside the repository in the ChatGPT Library; keep an
+offline backup as well.
+
+After adding the three secrets, open GitHub Actions and manually run
+**Deploy DEYN trusted-time Worker** from the `security-v2-lab` branch. Confirm the
+deployment output and record the Worker HTTPS endpoint. This workflow has been
+prepared but has **not** been run; no Worker endpoint is live yet.
