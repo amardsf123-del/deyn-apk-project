@@ -248,6 +248,7 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
     const uid = claims?.uid;
     const ownerDeviceId = claims?.deviceId;
     if (!shopId || !uid || !validDevice(ownerDeviceId)) fail("permission-denied");
+    if (targetUid === uid && targetDeviceId === ownerDeviceId) fail("failed-precondition");
     const nowMs = now();
     await db.runTransaction(async (tx) => {
       const sRef = shopRef(db, shopId);
