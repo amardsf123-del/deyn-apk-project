@@ -33,7 +33,7 @@ after(async () => {
 
 async function clearShop() {
   const ref = db.collection("shops").doc(shopId);
-  const collections = ["members", "devices", "invitations"];
+  const collections = ["members", "devices", "invitations", "subscriptionAudit"];
   for (const name of collections) {
     const snap = await ref.collection(name).get();
     const batch = db.batch();
