@@ -98,3 +98,13 @@ The old app and key generator share an embedded HMAC secret. Replacing that syst
 - Unknown fields, auth fields (including `fcb1899` if present), and bulk trash are preserved unchanged. Empty active arrays remain valid after the intentional Settings reset.
 - 11 Node tests passed locally, covering legacy/versioned files, preservation, empty/reset states, malformed inputs, wrong versions, tampering, and fail-closed digest behavior.
 - This is read-only prototype code only. It does not import/restore, write app storage, change the existing backup button, or modify production source/APK/`main`. Android WebView testing and a transactional restore design remain required.
+
+## Recovered v2 package review (2026-11-07)
+
+The previously saved v2 source package and the matching owner license-signing key were recovered from the Library. The private license key was verified to derive the public key already embedded in the v2 app/keygen. Actual keygen-to-app signing/verification checks passed in Node WebCrypto for a valid code; wrong-device and altered-signature checks were rejected. Both recovered HTML files passed JavaScript syntax checks.
+
+This confirms the old shared HMAC secret can be removed from the v2 source. It does **not** make v2 ready for release. See `RECOVERED_V2_PACKAGE_REVIEW.md` for the blocking findings: unsigned/local-clock expiry, short device ID, plaintext localStorage fallback, incomplete clock warning/grace policy, undeployed trusted-time service, recovery-token integration, old-code migration, Android WebView validation, and missing release signing.
+
+A separate Ed25519 keypair has now been created for the trusted-time service. Its public key is in `trusted-time-worker/client/public-key.js`; its private key is kept outside GitHub and APKs. A manual Cloudflare deployment workflow has been prepared and requires owner-controlled Cloudflare credentials and GitHub Actions secrets before it can be run. No Worker is deployed yet.
+
+A CI workflow was added to run all security-lab JavaScript syntax checks and Node tests on pushes to this branch. The workflow file is present; its first remote run has not yet been confirmed.
