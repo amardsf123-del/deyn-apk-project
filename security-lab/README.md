@@ -55,3 +55,5 @@ The old app and key generator share an embedded HMAC secret. Replacing that syst
 - **Critical source finding:** the inspected app currently does `S = load() || seed()` and then `persist()`. Since `load()` returns null for malformed or schema-invalid existing data, startup can overwrite that value with demo seed data. See `CRITICAL_DATA_PRESERVATION_FINDING.md`.
 - The prototypes are simulated-storage tests only. They are not integrated, not tested on Android/WebView/Capacitor, and do not change the production ZIP or `main`.
 - The current production startup flow remains unchanged until backup/recovery UI and on-device validation are designed and tested.
+
+- Reviewed current backup path in `BACKUP_RESTORE_REVIEW.md`: current JSON button exports the entire `S` object (including auth fields) and no import/restore path was found in inspected source. The file must be treated as confidential. No backup/restore code was changed.
