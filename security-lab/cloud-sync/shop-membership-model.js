@@ -106,6 +106,37 @@ export function validateDeviceRegistration({
   };
 }
 
+/**
+ * Pure transition used inside a trusted Firestore transaction.
+ * The caller must atomically read the invitation, verify the owner, write the
+ * device record, and persist this returned used invitation. A client-side
+ * call alone cannot make an invitation single-use.
+ */
+export function consumeWorkerInvitation({ invitation, shopId, uid, deviceId, nowMs }) {
+  if (!invitation || invitation.status !== "pending") {
+    return { accepted: false, reason: "invitation_not_pending" };
+  }
+  if (invitation.shopId !== shopId || invitation.targetUid !== uid ||
+      invitation.role !== ROLES.WORKER) {
+    return { accepted: false, reason: "invitation_target_mismatch" };
+  }
+  if (!Number.isSafeInteger(nowMs) || !Number.isSafeInteger(invitation.expiresAtMs) ||
+      nowMs >= invitation.expiresAtMs) {
+    return { accepted: false, reason: "invitation_expired" };
+  }
+  if (!isValidDeviceId(deviceId)) return { accepted: false, reason: "invalid_device_id" };
+  return {
+    accepted: true,
+    invitation: Object.freeze({
+      ...invitation,
+      status: "used",
+      redeemedByUid: uid,
+      redeemedDeviceId: deviceId,
+      redeemedAtMs: nowMs
+    })
+  };
+}
+
 export function publicShopStatus(shop, serverNowMs) {
   if (!shop || !Number.isSafeInteger(serverNowMs)) return { status: "unavailable" };
   const expired = shop.subscriptionExpiresAtMs !== null &&
