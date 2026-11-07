@@ -70,3 +70,11 @@ The old app and key generator share an embedded HMAC secret. Replacing that syst
 
 
 - Reviewed recovery export mechanics in `security-lab/recovery-mode/RAW_EXPORT_TECHNICAL_REVIEW.md`: the current app uses a Blob/anchor download for ordinary backup, but there is no evidence it reliably saves files in the installed Android WebView. The app does not currently declare Capacitor Filesystem or Share plugins. No dependency was added; device testing is still required before implementing raw export.
+
+
+## Startup integration mapping (2026-11-07)
+- Inspected the actual app startup code around `licenseBoot(init)`, `agStartApp()`, and `init()`.
+- Confirmed order: license boot runs first; after license success it calls `init()`; `init()` does `S = load() || seed()`, then initializes defaults/UI and persists.
+- Added `recovery-mode/SAFE_START_INTEGRATION_MAP.md` showing where a read-only data-integrity gate must run before license boot, how valid/new-install cases continue, and how damaged/unavailable storage must stop.
+- The gate must not bypass licensing or expose normal debt UI. Existing activation, `fcb1899`, and owner/worker behavior remain outside the recovery change.
+- This is a source-mapped plan only. No app source was integrated, no APK was built, and no production data or `main` branch was touched.
