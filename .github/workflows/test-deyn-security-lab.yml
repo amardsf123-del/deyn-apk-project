@@ -39,11 +39,13 @@ jobs:
           java-version: "21"
       - name: Install Firebase emulator test dependencies
         run: npm install --prefix security-lab/cloud-sync/emulator-tests
-      - name: Test Firestore rules in the Firebase Emulator
+      - name: Install cloud membership backend dependencies
+        run: npm install --prefix security-lab/cloud-sync/functions
+      - name: Test Firestore rules and membership transactions in the Firebase Emulator
         run: |
           set -euo pipefail
           ./security-lab/cloud-sync/emulator-tests/node_modules/.bin/firebase emulators:exec \
             --config firebase.cloud-sync.json \
             --project demo-deyn-sync \
             --only firestore \
-            "npm --prefix security-lab/cloud-sync/emulator-tests run test:rules"
+            "npm --prefix security-lab/cloud-sync/emulator-tests run test:rules && npm --prefix security-lab/cloud-sync/functions test"
