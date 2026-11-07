@@ -63,6 +63,11 @@ async function seed({ expiresAt = now + 60 * 60 * 1000 } = {}) {
       revision: 1,
       archivedAt: null
     });
+    for (const [uid, role] of [["owner-1", "owner"], ["worker-1", "worker"]]) {
+      await setDoc(doc(db, `users/${uid}/shops/${shopId}`), {
+        shopId, role, status: "active", createdAtMs: now
+      });
+    }
   });
 }
 
@@ -244,5 +249,14 @@ test("client cannot write shop subscription or invitation records", async () => 
   }));
   await assertFails(setDoc(doc(db, path("invitations/fake")), {
     status: "pending", role: "worker"
+  }));
+});
+
+test("users can discover only their own shop index records", async () => {
+  const workerDb = authDb("worker-1");
+  await assertSucceeds(getDoc(doc(workerDb, `users/worker-1/shops/${shopId}`)));
+  await assertFails(getDoc(doc(workerDb, `users/owner-1/shops/${shopId}`)));
+  await assertFails(updateDoc(doc(workerDb, `users/worker-1/shops/${shopId}`), {
+    role: "owner"
   }));
 });
