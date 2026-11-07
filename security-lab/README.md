@@ -4,9 +4,8 @@ This branch is an isolated preparation area. Nothing here is included in either 
 
 ## Current status
 - The current production source in the ZIP remains unchanged.
-- The v2 Ed25519 prototype has passed local tests with a temporary test keypair only.
-- The configured public key is `GGV7VOrfbHEBHxS/wzJ7OeZsBc2Jx013mPZT5s4GML4=`.
-- The corresponding production private PEM has not been recovered. Never commit or upload a private signing key.
+- The recovered v2 Ed25519 license keypair was verified: the private PEM remains outside GitHub/ APKs, and its derived public key matches `GGV7VOrfbHEBHxS/wzJ7OeZsBc2Jx013mPZT5s4GML4=`.
+- An isolated DEYN3 license-format prototype now exists under `security-lab/licensing-v3/`. It signs a fixed UTC expiry timestamp, binds a 128-bit device ID, and tests owner/worker and lifetime claims. It is not integrated into the app.
 - A Cloudflare Worker signed-time template and an app-side Ed25519 response verifier have been added under `security-lab/trusted-time-worker/`.
 - Worker-side tests passed: valid signed response, nonce binding, malformed nonce rejection, and missing-secret fail-closed behavior.
 - Client-verifier tests passed: valid signed time accepted, nonce mismatch rejected, and altered signature rejected.
@@ -110,3 +109,12 @@ A separate Ed25519 keypair has now been created for the trusted-time service. It
 A CI workflow was added to run all security-lab JavaScript syntax checks and Node tests on pushes to this branch. The workflow file is present; its first remote run has not yet been confirmed.
 
 The new GitHub Actions security-lab CI has now completed successfully after correcting one test import path: **51 tests passed, 0 failed**, and all JavaScript syntax checks passed (run `42321608221`, commit `7300a047af31b5340ab0b2a472beaab7afa9f957`). These are prototype/unit tests only; they do not replace Android device testing or prove the prototypes are integrated into the app.
+
+
+## DEYN3 license prototype (2026-11-07)
+- Added `security-lab/licensing-v3/license-v3.js`, an isolated Ed25519 signed-claim format.
+- Expiry is now a signed exact UTC Unix-millisecond timestamp; lifetime tier uses null and is exempt from expiry.
+- Device binding is 128-bit random hex, replacing the earlier 32-bit prototype identifier.
+- Verifier requires trusted time as an input and rejects expired, wrong-device, malformed, non-canonical, altered-signature, wrong-key, and legacy DEYN2 codes.
+- Added 8 Node tests. CI run `42322975776` completed successfully: 59 total security-lab tests passed, 0 failed.
+- This remains a prototype only. It has not been integrated into app/keygen UI, does not solve old-code migration, and has not been tested on Android WebView.
