@@ -49,13 +49,65 @@ test("blocks expired, suspended, and inactive memberships/devices", () => {
   assert.equal(authorizeShopRequest({ ...base, member: { ...ownerMember, status: "revoked" } }).reason, "membership_inactive");
   assert.equal(authorizeShopRequest({ ...base, device: { ...ownerDevice, status: "revoked" } }).reason, "device_inactive");
 });
-test("requires owner approval before registering a worker phone", () => {
-  const input = { deviceId: "d".repeat(32), uid: "worker_uid_123", shopId: shop.shopId, role: ROLES.WORKER, approvedByUid: "someone_else_123", shop };
-  assert.equal(validateDeviceRegistration(input).reason, "owner_approval_required");
-  const accepted = validateDeviceRegistration({ ...input, approvedByUid: shop.ownerUid });
+const approver = {
+  claims: ownerClaims,
+  member: ownerMember,
+  device: ownerDevice
+};
+
+test("worker phone registration requires verified owner session and invitation", () => {
+  const input = {
+    deviceId: "d".repeat(32), uid: "worker_uid_123",
+    shopId: shop.shopId, role: ROLES.WORKER, shop, nowMs: now,
+    invitation: {
+      shopId: shop.shopId, targetUid: "worker_uid_123",
+      role: ROLES.WORKER, status: "pending", expiresAtMs: now + 60_000
+    }
+  };
+  assert.equal(validateDeviceRegistration(input).reason, "verified_owner_approval_required");
+  const accepted = validateDeviceRegistration({ ...input, ...{
+    approverClaims: approver.claims, approverMember: approver.member,
+    approverDevice: approver.device
+  }});
   assert.equal(accepted.valid, true);
   assert.equal(accepted.record.deviceId, "d".repeat(32));
 });
+
+test("rejects forged owner UID without verified owner claims and records", () => {
+  const result = validateDeviceRegistration({
+    deviceId: "d".repeat(32), uid: "worker_uid_123", shopId: shop.shopId,
+    role: ROLES.WORKER, shop, nowMs: now,
+    invitation: { shopId: shop.shopId, targetUid: "worker_uid_123", role: ROLES.WORKER, status: "pending", expiresAtMs: now + 60_000 },
+    approverClaims: { uid: shop.ownerUid },
+    approverMember: ownerMember, approverDevice: ownerDevice
+  });
+  assert.equal(result.reason, "verified_owner_approval_required");
+});
+
+test("rejects expired or mismatched worker invitations", () => {
+  const baseInput = {
+    deviceId: "d".repeat(32), uid: "worker_uid_123", shopId: shop.shopId,
+    role: ROLES.WORKER, shop, nowMs: now,
+    approverClaims: approver.claims, approverMember: approver.member, approverDevice: approver.device
+  };
+  assert.equal(validateDeviceRegistration({
+    ...baseInput, invitation: { shopId: shop.shopId, targetUid: "worker_uid_123", role: ROLES.WORKER, status: "pending", expiresAtMs: now }
+  }).reason, "valid_worker_invitation_required");
+  assert.equal(validateDeviceRegistration({
+    ...baseInput, invitation: { shopId: shop.shopId, targetUid: "someone_else_123", role: ROLES.WORKER, status: "pending", expiresAtMs: now + 60_000 }
+  }).reason, "valid_worker_invitation_required");
+});
+
+test("verified owner can enroll a replacement phone under the same owner account", () => {
+  const result = validateDeviceRegistration({
+    deviceId: "9".repeat(32), uid: shop.ownerUid, shopId: shop.shopId,
+    role: ROLES.OWNER, shop, nowMs: now,
+    approverClaims: ownerClaims, approverMember: ownerMember, approverDevice: ownerDevice
+  });
+  assert.equal(result.valid, true);
+  assert.notEqual(result.record.deviceId, ownerDevice.deviceId);
+});
+
 test("worker cannot register as primary owner", () => {
   const result = validateDeviceRegistration({ deviceId: "e".repeat(32), uid: "worker_uid_123", shopId: shop.shopId, role: ROLES.OWNER, approvedByUid: shop.ownerUid, shop });
   assert.equal(result.reason, "only_primary_owner_uid_can_be_owner");
