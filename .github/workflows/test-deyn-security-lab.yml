@@ -28,6 +28,11 @@ jobs:
           done
       - name: Install cloud membership backend dependencies
         run: npm install --prefix security-lab/cloud-sync/functions
+      - name: Check Capacitor 8 Firebase bridge dependency compatibility
+        run: |
+          set -euo pipefail
+          npm install --prefix security-lab/cloud-sync/capacitor8-bridge-test
+          npm ls --prefix security-lab/cloud-sync/capacitor8-bridge-test --depth=0
       - name: Run security prototype tests
         run: |
           set -euo pipefail
