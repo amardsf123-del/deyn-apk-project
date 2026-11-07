@@ -2,7 +2,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { createMembershipService, hashInvitationSecret } from "../membership-service.js";
+import { assertPlatformAdmin, createMembershipService, hashInvitationSecret } from "../membership-service.js";
 
 const projectId = "demo-deyn-sync";
 const app = initializeApp({ projectId }, "deyn-membership-tests");
@@ -238,4 +238,10 @@ test("owner can deactivate a worker membership and block future sessions", async
     claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
     targetUid: "owner-uid-0001"
   }), /failed-precondition/);
+});
+
+test("only a trusted platform administrator can provision new shops", () => {
+  assert.equal(assertPlatformAdmin({ platformAdmin: true }), true);
+  assert.throws(() => assertPlatformAdmin({}), /permission-denied/);
+  assert.throws(() => assertPlatformAdmin({ platformAdmin: "true" }), /permission-denied/);
 });
