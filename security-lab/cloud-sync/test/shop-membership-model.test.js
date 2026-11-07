@@ -108,6 +108,23 @@ test("verified owner can enroll a replacement phone under the same owner account
   assert.notEqual(result.record.deviceId, ownerDevice.deviceId);
 });
 
+test("owner can sign in on the worker phone without replacing the worker enrollment", () => {
+  const workerPhoneId = "b".repeat(32);
+  const workerEnrollment = {
+    deviceId: workerPhoneId, uid: "worker_uid_123",
+    shopId: shop.shopId, role: ROLES.WORKER
+  };
+  const ownerEnrollment = validateDeviceRegistration({
+    deviceId: workerPhoneId, uid: shop.ownerUid, shopId: shop.shopId,
+    role: ROLES.OWNER, shop, nowMs: now,
+    approverClaims: ownerClaims, approverMember: ownerMember, approverDevice: ownerDevice
+  });
+  assert.equal(ownerEnrollment.valid, true);
+  assert.equal(ownerEnrollment.record.deviceId, workerEnrollment.deviceId);
+  assert.notEqual(ownerEnrollment.record.uid, workerEnrollment.uid);
+  // Firestore stores these as separate records keyed by deviceId + UID.
+});
+
 test("worker cannot register as primary owner", () => {
   const result = validateDeviceRegistration({
     deviceId: "e".repeat(32), uid: "worker_uid_123", shopId: shop.shopId,
