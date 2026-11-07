@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   initialClockState, transitionClockState, getClockStatus,
   finalizeGracePeriod, WARNING_INTERVAL_MS, GRACE_PERIOD_MS
-} from "./clock-warning-state.js";
+} from "../clock-warning-state.js";
 
 const day = 24 * 60 * 60 * 1000;
 const incident = id => ({ type: "SUSPICIOUS_ROLLBACK", incidentId: id });
