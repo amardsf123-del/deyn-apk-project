@@ -45,3 +45,13 @@ The old app and key generator share an embedded HMAC secret. Replacing that syst
 - Local-only software cannot reliably defeat rollback after data wipe/root/device modification; periodic online verification is necessary for stronger protection.
 
 **This document is a work plan, not evidence that these controls are implemented.**
+
+
+## Data-preservation work (2026-11-07)
+- Added `DATA_MIGRATION_PLAN.md` and `SECURE_STORAGE_REVIEW.md`.
+- Added isolated data migration prototype and 7 Node tests. The tests cover full-object copy, old-record preservation, malformed/invalid input rejection, idempotence, destination conflict protection, failed write safety, and no trusted phone-clock timestamp.
+- Added startup safety guard prototype under `security-lab/startup-safety/`.
+- All 7 startup guard Node tests passed locally. They cover first install seed, valid existing data, malformed JSON preservation, invalid schema preservation, unexpected storage value, invalid seed rejection, and retention of factory password/auth and unknown nested fields.
+- **Critical source finding:** the inspected app currently does `S = load() || seed()` and then `persist()`. Since `load()` returns null for malformed or schema-invalid existing data, startup can overwrite that value with demo seed data. See `CRITICAL_DATA_PRESERVATION_FINDING.md`.
+- The prototypes are simulated-storage tests only. They are not integrated, not tested on Android/WebView/Capacitor, and do not change the production ZIP or `main`.
+- The current production startup flow remains unchanged until backup/recovery UI and on-device validation are designed and tested.
