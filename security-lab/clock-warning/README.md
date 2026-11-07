@@ -7,7 +7,7 @@ Pure state transition module for DEYN's agreed policy. It is deliberately separa
 - Network unavailable and user snooze do not increment warning stages.
 - A suspicious rollback incident must have a unique incident ID.
 - The same incident cannot be counted twice.
-- Warning stages are debounced by at least 24 hours.
+- Warning stages are debounced by at least 24 hours in this prototype. This interval is a provisional engineering default, not a final policy decision; it must be reviewed before integration.
 - The third distinct warning starts a 48-hour grace period.
 - A successful authenticated trusted-time response clears unresolved warning/grace state.
 - After 48 hours, the module reports suspended access state.
