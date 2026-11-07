@@ -16,17 +16,22 @@ function bytesToBase64Url(bytes) {
   return b64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
-function base64UrlToBytes(value) {
-  if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) {
-    throw new Error("Invalid base64url");
-  }
-  const b64 = value.replace(/-/g, "+").replace(/_/g, "/") +
-    "=".repeat((4 - value.length % 4) % 4);
+function decodeBase64(value) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/").replace(/\s/g, "");
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) throw new Error("Invalid base64 key material");
+  const b64 = normalized + "=".repeat((4 - normalized.length % 4) % 4);
   if (typeof atob === "function") {
     const binary = atob(b64);
     return Uint8Array.from(binary, c => c.charCodeAt(0));
   }
   return new Uint8Array(Buffer.from(b64, "base64"));
+}
+
+function decodePrivateKeyInput(value) {
+  if (typeof value !== "string") return new Uint8Array(value);
+  const pem = value.trim();
+  const match = /^-----BEGIN PRIVATE KEY-----([\s\S]+?)-----END PRIVATE KEY-----$/.exec(pem);
+  return decodeBase64(match ? match[1] : pem);
 }
 
 function canonicalPayload(payload) {
@@ -84,9 +89,7 @@ export async function issueLicense({
   if (tier === "LT" ? expiryUtcMs !== null : (!Number.isSafeInteger(expiryUtcMs) || expiryUtcMs <= 0)) {
     throw new Error("Expiry must be a fixed UTC timestamp; LT must use null");
   }
-  const pkcs8 = typeof privateKeyPkcs8 === "string"
-    ? base64UrlToBytes(privateKeyPkcs8)
-    : new Uint8Array(privateKeyPkcs8);
+  const pkcs8 = decodePrivateKeyInput(privateKeyPkcs8);
   const key = await c.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"]);
   const nonce = new Uint8Array(16);
   c.getRandomValues(nonce);
@@ -125,7 +128,7 @@ export async function verifyLicense({
     if (canonicalPayload(payload) !== new TextDecoder().decode(body)) return null;
     if (payload.d !== expectedDeviceId.toLowerCase()) return null;
     if (payload.t !== "LT" && trustedNowUtcMs >= payload.exp) return null;
-    const raw = typeof publicKeyRaw === "string" ? base64UrlToBytes(publicKeyRaw) : new Uint8Array(publicKeyRaw);
+    const raw = typeof publicKeyRaw === "string" ? decodeBase64(publicKeyRaw) : new Uint8Array(publicKeyRaw);
     const key = await c.subtle.importKey("raw", raw, { name: "Ed25519" }, false, ["verify"]);
     const valid = await c.subtle.verify("Ed25519", key, signature, body);
     if (!valid) return null;
