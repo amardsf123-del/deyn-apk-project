@@ -167,3 +167,75 @@ test("revoked device cannot obtain another session", async () => {
     uid: "owner-uid-0001", shopId, deviceId: workerDevice
   }), /permission-denied/);
 });
+
+test("concurrent redemption can consume one invitation only once", async () => {
+  await clearShop();
+  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  const invitation = await service.createWorkerInvitation({
+    claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
+    targetEmail: "worker@example.com"
+  });
+  const attempts = await Promise.allSettled([
+    service.redeemWorkerInvitationForShop({
+      uid: "worker-uid-0002", email: "worker@example.com", emailVerified: true,
+      shopId, invitationSecret: invitation.invitationSecret, deviceId: workerDevice
+    }),
+    service.redeemWorkerInvitationForShop({
+      uid: "worker-uid-0002", email: "worker@example.com", emailVerified: true,
+      shopId, invitationSecret: invitation.invitationSecret, deviceId: "c".repeat(32)
+    })
+  ]);
+  assert.equal(attempts.filter((x) => x.status === "fulfilled").length, 1);
+  assert.equal(attempts.filter((x) => x.status === "rejected").length, 1);
+  const invite = await db.collection("shops").doc(shopId)
+    .collection("invitations").doc(hashInvitationSecret(invitation.invitationSecret)).get();
+  assert.equal(invite.data().status, "used");
+});
+
+test("expired worker invitation cannot be redeemed", async () => {
+  await clearShop();
+  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  const invitation = await service.createWorkerInvitation({
+    claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
+    targetEmail: "worker@example.com", expiresInMs: 60_000
+  });
+  clock += 60_001;
+  await assert.rejects(service.redeemWorkerInvitationForShop({
+    uid: "worker-uid-0002", email: "worker@example.com", emailVerified: true,
+    shopId, invitationSecret: invitation.invitationSecret, deviceId: workerDevice
+  }), /permission-denied/);
+  clock -= 60_001;
+});
+
+test("forged owner claims cannot create worker invitations", async () => {
+  await clearShop();
+  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  await assert.rejects(service.createWorkerInvitation({
+    claims: { uid: "worker-uid-0002", shopId, memberRole: "owner", deviceId: ownerDevice },
+    targetEmail: "attacker@example.com"
+  }), /permission-denied/);
+});
+
+test("owner can deactivate a worker membership and block future sessions", async () => {
+  await clearShop();
+  await service.createShop({ uid: "owner-uid-0001", deviceId: ownerDevice });
+  const invitation = await service.createWorkerInvitation({
+    claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
+    targetEmail: "worker@example.com"
+  });
+  await service.redeemWorkerInvitationForShop({
+    uid: "worker-uid-0002", email: "worker@example.com", emailVerified: true,
+    shopId, invitationSecret: invitation.invitationSecret, deviceId: workerDevice
+  });
+  await service.revokeMember({
+    claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
+    targetUid: "worker-uid-0002"
+  });
+  await assert.rejects(service.issueDeviceSession({
+    uid: "worker-uid-0002", shopId, deviceId: workerDevice
+  }), /permission-denied/);
+  await assert.rejects(service.revokeMember({
+    claims: { uid: "owner-uid-0001", shopId, memberRole: "owner", deviceId: ownerDevice },
+    targetUid: "owner-uid-0001"
+  }), /failed-precondition/);
+});
