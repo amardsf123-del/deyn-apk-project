@@ -37,7 +37,8 @@ jobs:
             for (const [name, v] of Object.entries(a.vulnerabilities || {})) {
               process.stdout.write(JSON.stringify({
                 package: name, severity: v.severity, direct: v.isDirect,
-                range: v.range, fixAvailable: v.fixAvailable
+                range: v.range, fixAvailable: v.fixAvailable,
+                advisories: (v.via || []).map(x => typeof x === "string" ? x : {title: x.title, url: x.url, range: x.range})
               }) + "\n");
             }
           '
