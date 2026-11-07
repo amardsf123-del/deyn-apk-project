@@ -5,9 +5,10 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { assertPlatformAdmin, createMembershipService } from "./membership-service.js";
 
 initializeApp();
+const authAdmin = getAuth();
 const service = createMembershipService({
   db: getFirestore(),
-  authAdmin: getAuth()
+  authAdmin
 });
 
 function mapError(error) {
@@ -33,10 +34,18 @@ const options = { region: "me-central1", enforceAppCheck: true };
 
 export const createShop = onCall(options, wrap(async (request) => {
   assertPlatformAdmin(request.auth.token);
-  if (request.auth.token.email_verified !== true) throw new HttpsError("permission-denied", "verified-email-required");
+  const ownerUid = request.data?.ownerUid;
+  const ownerEmail = typeof request.data?.ownerEmail === "string"
+    ? request.data.ownerEmail.trim().toLowerCase() : "";
+  if (typeof ownerUid !== "string" || ownerUid.length < 6 || !ownerEmail) {
+    throw new HttpsError("invalid-argument", "owner-account-required");
+  }
+  const ownerUser = await authAdmin.getUser(ownerUid);
+  if (!ownerUser.emailVerified || ownerUser.email?.toLowerCase() !== ownerEmail) {
+    throw new HttpsError("permission-denied", "owner-email-must-be-verified-and-match");
+  }
   return service.createShop({
-    uid: request.auth.uid,
-    deviceId: request.data?.deviceId,
+    ownerUid,
     subscriptionExpiresAtMs: request.data?.subscriptionExpiresAtMs ?? null
   });
 }));
