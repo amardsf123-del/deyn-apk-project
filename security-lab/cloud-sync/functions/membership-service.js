@@ -151,23 +151,6 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
     return { invitationSecret: secret, expiresAtMs: nowMs + lifetime };
   }
 
-  async function redeemWorkerInvitation({ uid, email, emailVerified, invitationSecret, deviceId }) {
-    if (!uid || !emailVerified) fail("permission-denied");
-    if (!validDevice(deviceId) || typeof invitationSecret !== "string" ||
-        invitationSecret.length < 32 || invitationSecret.length > 256) fail("invalid-argument");
-    const normalizedEmail = normalizeEmail(email);
-    const invitationId = hashInvitationSecret(invitationSecret);
-    const nowMs = now();
-    let shopId;
-    await db.runTransaction(async (tx) => {
-      // Find the shop-scoped invitation by collectionGroup query outside the
-      // transaction is intentionally avoided. The invitation carries a shop
-      // ID only after a trusted lookup. The API therefore requires shopId.
-      fail("internal");
-    });
-    return { shopId };
-  }
-
   async function redeemWorkerInvitationForShop({ uid, email, emailVerified, shopId, invitationSecret, deviceId }) {
     if (!uid || !emailVerified) fail("permission-denied");
     if (typeof shopId !== "string" || !validDevice(deviceId) ||
