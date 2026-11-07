@@ -225,6 +225,35 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
     return { shopId, deviceId, role: member.role, customToken };
   }
 
+  async function updateShopSubscription({ shopId, subscriptionExpiresAtMs, actorUid }) {
+    if (typeof shopId !== "string" || typeof actorUid !== "string" || actorUid.length < 6) {
+      fail("invalid-argument");
+    }
+    if (subscriptionExpiresAtMs !== null &&
+        (!Number.isSafeInteger(subscriptionExpiresAtMs) || subscriptionExpiresAtMs <= 0)) {
+      fail("invalid-argument");
+    }
+    const nowMs = now();
+    const sRef = shopRef(db, shopId);
+    const auditRef = sRef.collection("subscriptionAudit").doc(randomUUID());
+    await db.runTransaction(async (tx) => {
+      const sSnap = await tx.get(sRef);
+      if (!sSnap.exists) fail("not-found");
+      const previousExpiry = sSnap.data().subscriptionExpiresAtMs ?? null;
+      tx.update(sRef, {
+        subscriptionExpiresAtMs,
+        updatedAtMs: nowMs,
+        subscriptionUpdatedByUid: actorUid
+      });
+      tx.create(auditRef, {
+        shopId, previousExpiryMs: previousExpiry,
+        newExpiryMs: subscriptionExpiresAtMs,
+        changedByUid: actorUid, changedAtMs: nowMs
+      });
+    });
+    return { shopId, subscriptionExpiresAtMs };
+  }
+
   async function revokeMember({ claims, targetUid }) {
     if (typeof targetUid !== "string" || targetUid.length < 6) fail("invalid-argument");
     const shopId = claims?.shopId;
@@ -282,6 +311,6 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
 
   return Object.freeze({
     createShop, enrollOwnerDevice, createWorkerInvitation,
-    redeemWorkerInvitationForShop, issueDeviceSession, revokeDevice, revokeMember
+    redeemWorkerInvitationForShop, issueDeviceSession, revokeDevice, revokeMember, updateShopSubscription
   });
 }
