@@ -25,7 +25,7 @@ Offline changes are provisional until the backend accepts them. The UI must dist
 
 ## Files
 
-- `sync-core.js`: pure logic for role permissions, event validation/deduplication, balance calculation, and revision-checked profile updates.
+- `sync-core.js`: pure logic for role permissions, event validation/deduplication, balance calculation, customer analytics, and revision-checked profile updates.\n- `sync-outbox.js`: offline queue prototype with idempotent enqueue, retry batches, attempt tracking, and removal only after backend acknowledgement. It is in-memory test logic only; a native durable storage adapter is still required.
 - `test/sync-core.test.js`: Node tests for those invariants.
 - `firestore.rules`: draft tenant-isolation and role rules. It is not deployed and requires emulator/security-rules tests plus review.
   
