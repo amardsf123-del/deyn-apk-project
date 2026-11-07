@@ -62,22 +62,47 @@ export function authorizeShopRequest({ claims, shop, member, device, requiredAct
   return deny("permission_denied");
 }
 
-export function validateDeviceRegistration({ deviceId, uid, shopId, role, approvedByUid, shop }) {
+export function validateDeviceRegistration({
+  deviceId, uid, shopId, role, shop, nowMs,
+  approverClaims, approverMember, approverDevice, invitation = null
+}) {
   if (!isValidDeviceId(deviceId)) return { valid: false, reason: "invalid_device_id" };
   if (typeof uid !== "string" || !UID_RE.test(uid)) return { valid: false, reason: "invalid_uid" };
   if (!isValidShopId(shopId) || shop?.shopId !== shopId || shop?.status !== "active") {
     return { valid: false, reason: "invalid_shop" };
   }
   if (![ROLES.OWNER, ROLES.WORKER].includes(role)) return { valid: false, reason: "invalid_role" };
-  if (typeof approvedByUid !== "string" || approvedByUid !== shop.ownerUid) {
-    return { valid: false, reason: "owner_approval_required" };
-  }
+  const approverIsOwner =
+    approverClaims?.uid === shop.ownerUid &&
+    approverClaims?.shopId === shopId &&
+    approverClaims?.memberRole === ROLES.OWNER &&
+    approverClaims?.deviceId === approverDevice?.deviceId &&
+    approverMember?.uid === shop.ownerUid &&
+    approverMember?.shopId === shopId &&
+    approverMember?.role === ROLES.OWNER &&
+    approverMember?.status === "active" &&
+    approverDevice?.uid === shop.ownerUid &&
+    approverDevice?.shopId === shopId &&
+    approverDevice?.status === "active" &&
+    isValidDeviceId(approverDevice?.deviceId);
+  if (!approverIsOwner) return { valid: false, reason: "verified_owner_approval_required" };
   if (role === ROLES.OWNER && uid !== shop.ownerUid) {
     return { valid: false, reason: "only_primary_owner_uid_can_be_owner" };
   }
+  if (role === ROLES.WORKER) {
+    if (!invitation || invitation.shopId !== shopId || invitation.targetUid !== uid ||
+        invitation.role !== ROLES.WORKER || invitation.status !== "pending" ||
+        !Number.isSafeInteger(nowMs) || !Number.isSafeInteger(invitation.expiresAtMs) ||
+        nowMs >= invitation.expiresAtMs) {
+      return { valid: false, reason: "valid_worker_invitation_required" };
+    }
+  }
   return {
     valid: true,
-    record: Object.freeze({ deviceId, uid, shopId, role, status: "active", approvedByUid, createdAtServer: true })
+    record: Object.freeze({
+      deviceId, uid, shopId, role, status: "active",
+      approvedByUid: approverClaims.uid, createdAtServer: true
+    })
   };
 }
 
