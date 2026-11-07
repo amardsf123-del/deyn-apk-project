@@ -2,7 +2,7 @@ import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { createMembershipService } from "./membership-service.js";
+import { assertPlatformAdmin, createMembershipService } from "./membership-service.js";
 
 initializeApp();
 const service = createMembershipService({
@@ -32,7 +32,7 @@ function wrap(handler) {
 const options = { region: "me-central1", enforceAppCheck: true };
 
 export const createShop = onCall(options, wrap(async (request) => {
-  if (request.auth.token.platformAdmin !== true) throw new HttpsError("permission-denied", "platform-admin-provisioning-only");
+  assertPlatformAdmin(request.auth.token);
   if (request.auth.token.email_verified !== true) throw new HttpsError("permission-denied", "verified-email-required");
   return service.createShop({
     uid: request.auth.uid,
