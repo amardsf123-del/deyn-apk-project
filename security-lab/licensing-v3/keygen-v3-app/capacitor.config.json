@@ -1,0 +1,8 @@
+{
+  "appId": "com.deyn.keygen.v3test",
+  "appName": "DEYN Keygen v3 Test",
+  "webDir": "www",
+  "backgroundColor": "#065043",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}
