@@ -101,3 +101,12 @@ export const revokeWorkerMembership = onCall(options, wrap(async (request) => {
     targetUid: request.data?.targetUid
   });
 }));
+
+export const updateShopSubscription = onCall(options, wrap(async (request) => {
+  assertPlatformAdmin(request.auth.token);
+  return service.updateShopSubscription({
+    shopId: request.data?.shopId,
+    subscriptionExpiresAtMs: request.data?.subscriptionExpiresAtMs,
+    actorUid: request.auth.uid
+  });
+}));
