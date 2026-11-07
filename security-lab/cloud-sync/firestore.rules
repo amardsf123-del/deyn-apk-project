@@ -119,6 +119,13 @@ service cloud.firestore {
       }
     }
 
+    // Per-user shop index lets a signed-in user discover their own shop IDs.
+    // It contains no customer or ledger data and is written only by trusted Admin SDK code.
+    match /users/{userId}/shops/{shopId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
