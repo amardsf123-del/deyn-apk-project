@@ -39,6 +39,9 @@ function memberRef(db, shopId, uid) {
 function deviceRef(db, shopId, deviceId, uid) {
   return shopRef(db, shopId).collection("devices").doc(deviceId + "__" + uid);
 }
+function userShopRef(db, uid, shopId) {
+  return db.collection("users").doc(uid).collection("shops").doc(shopId);
+}
 
 function assertActiveShop(shop, nowMs) {
   if (!shop || shop.status !== "active") fail("failed-precondition");
@@ -73,8 +76,8 @@ function sessionClaims(shopId, role, deviceId) {
 export function createMembershipService({ db, authAdmin, now = () => Date.now(), makeId = randomUUID, makeSecret = () => randomBytes(32).toString("base64url") }) {
   if (!db || !authAdmin) throw new TypeError("db_and_auth_required");
 
-  async function createShop({ uid, deviceId, subscriptionExpiresAtMs = null }) {
-    if (typeof uid !== "string" || uid.length < 6 || !validDevice(deviceId)) fail("invalid-argument");
+  async function createShop({ ownerUid, subscriptionExpiresAtMs = null }) {
+    if (typeof ownerUid !== "string" || ownerUid.length < 6) fail("invalid-argument");
     const nowMs = now();
     if (subscriptionExpiresAtMs !== null &&
         (!Number.isSafeInteger(subscriptionExpiresAtMs) || subscriptionExpiresAtMs <= nowMs)) {
@@ -82,21 +85,19 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
     }
     const shopId = makeId().replaceAll("-", "").slice(0, 24);
     const shop = {
-      shopId, ownerUid: uid, status: "active", subscriptionExpiresAtMs,
+      shopId, ownerUid, status: "active", subscriptionExpiresAtMs,
       createdAtMs: nowMs, updatedAtMs: nowMs, schemaVersion: 1
     };
     await db.runTransaction(async (tx) => {
       tx.create(shopRef(db, shopId), shop);
-      tx.create(memberRef(db, shopId, uid), {
-        uid, shopId, role: "owner", status: "active", createdAtMs: nowMs
+      tx.create(memberRef(db, shopId, ownerUid), {
+        uid: ownerUid, shopId, role: "owner", status: "active", createdAtMs: nowMs
       });
-      tx.create(deviceRef(db, shopId, deviceId, uid), {
-        deviceId, uid, shopId, role: "owner", status: "active",
-        approvedByUid: uid, createdAtMs: nowMs
+      tx.create(userShopRef(db, ownerUid, shopId), {
+        shopId, role: "owner", status: "active", createdAtMs: nowMs
       });
     });
-    const customToken = await authAdmin.createCustomToken(uid, sessionClaims(shopId, "owner", deviceId));
-    return { shopId, customToken, subscriptionExpiresAtMs };
+    return { shopId, subscriptionExpiresAtMs };
   }
 
   async function enrollOwnerDevice({ uid, shopId, deviceId, authTime }) {
@@ -194,6 +195,9 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
         deviceId, uid, shopId, role: "worker", status: "active",
         approvedByUid: invite.createdByUid, createdAtMs: nowMs
       });
+      tx.set(userShopRef(db, uid, shopId), {
+        shopId, role: "worker", status: "active", createdAtMs: nowMs
+      });
       tx.update(iRef, {
         status: "used", redeemedByUid: uid, redeemedDeviceId: deviceId,
         redeemedAtMs: nowMs
@@ -243,6 +247,10 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
       if (!targetSnap.exists) fail("not-found");
       if (targetSnap.data().role === "owner") fail("failed-precondition");
       tx.update(targetM, { status: "inactive", revokedAtMs: nowMs, revokedByUid: uid });
+      tx.set(userShopRef(db, targetUid, shopId), {
+        shopId, role: targetSnap.data().role, status: "inactive",
+        revokedAtMs: nowMs, revokedByUid: uid
+      }, { merge: true });
     });
     return { revoked: true };
   }
