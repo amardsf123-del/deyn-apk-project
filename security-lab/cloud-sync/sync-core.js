@@ -78,7 +78,7 @@ export function calculateBalance(events, customerId) {
   const merged = mergeLedgerEvents(events);
   return merged.reduce((balance, event) => {
     if (event.customerId !== customerId) return balance;
-    return balance + (event.kind === "debt" ? event.amountDzd : -event.amountDzd);
+    return balance + (event.kind === "debt" ? event.amountCentimes : -event.amountCentimes);
   }, 0);
 }
 
@@ -112,10 +112,10 @@ export function summarizeCustomerBalances(events) {
       summaries.set(event.customerId, item);
     }
     if (event.kind === "debt") {
-      item.debtDzd += event.amountDzd;
+      item.debtCentimes += event.amountCentimes;
       item.debtCount += 1;
     } else {
-      item.paidDzd += event.amountDzd;
+      item.paidCentimes += event.amountCentimes;
       item.paymentCount += 1;
     }
     item.balanceCentimes = item.debtCentimes - item.paidCentimes;
