@@ -25,7 +25,7 @@ service cloud.firestore {
       match /customers/{customerId} {
         allow read: if belongsToShop(shopId);
         allow create: if isOwner(shopId) || isWorker(shopId);
-        allow update, delete: if isOwner(shopId);
+        allow update: if isOwner(shopId);\n        // Soft-delete/archive only; retain linked debt history.\n        allow delete: if false;
       }
 
       match /ledger/{eventId} {
