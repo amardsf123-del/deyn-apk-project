@@ -7,8 +7,10 @@ This branch is an isolated preparation area. Nothing here is included in either 
 - The v2 Ed25519 prototype has passed local tests with a temporary test keypair only.
 - The configured public key is `GGV7VOrfbHEBHxS/wzJ7OeZsBc2Jx013mPZT5s4GML4=`.
 - The corresponding production private PEM has not been recovered. Never commit or upload a private signing key.
-- A Cloudflare Worker signed-time template has been added under `security-lab/trusted-time-worker/`.
-- Its JavaScript syntax check passed, and 3 local tests passed: valid Ed25519 signature + nonce binding, malformed nonce rejection, and missing-secret fail-closed behavior.
+- A Cloudflare Worker signed-time template and an app-side Ed25519 response verifier have been added under `security-lab/trusted-time-worker/`.
+- Worker-side tests passed: valid signed response, nonce binding, malformed nonce rejection, and missing-secret fail-closed behavior.
+- Client-verifier tests passed: valid signed time accepted, nonce mismatch rejected, and altered signature rejected.
+- These are local Node/WebCrypto tests with temporary test keys; Android WebView compatibility and real deployment remain untested.
 - Trusted-time service is not deployed or configured; no endpoint or production key exists.
 - No APK from this branch should be distributed.
 
