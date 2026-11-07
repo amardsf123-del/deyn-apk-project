@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ROLES, createShopRecord, authorizeShopRequest, validateDeviceRegistration, publicShopStatus } from "../shop-membership-model.js";
+import { ROLES, createShopRecord, authorizeShopRequest, validateDeviceRegistration, consumeWorkerInvitation, publicShopStatus } from "../shop-membership-model.js";
 
 const now = 1_800_000_000_000;
 const shop = createShopRecord({
@@ -143,6 +143,39 @@ test("two physical phones keep separate device IDs and share shop expiry", () =>
   assert.notEqual(second.deviceId, ownerDevice.deviceId);
   assert.equal(shop.subscriptionExpiresAtMs, now + 86_400_000);
 });
+test("worker invitation is consumed once and rejects replay", () => {
+  const invitation = {
+    invitationId: "invite_12345678", shopId: shop.shopId,
+    targetUid: "worker_uid_123", role: ROLES.WORKER,
+    status: "pending", expiresAtMs: now + 60_000
+  };
+  const first = consumeWorkerInvitation({
+    invitation, shopId: shop.shopId, uid: "worker_uid_123",
+    deviceId: "f".repeat(32), nowMs: now
+  });
+  assert.equal(first.accepted, true);
+  assert.equal(first.invitation.status, "used");
+  assert.equal(consumeWorkerInvitation({
+    invitation: first.invitation, shopId: shop.shopId,
+    uid: "worker_uid_123", deviceId: "f".repeat(32), nowMs: now + 1
+  }).reason, "invitation_not_pending");
+});
+
+test("worker invitation cannot be redeemed by another shop or account", () => {
+  const invitation = {
+    shopId: shop.shopId, targetUid: "worker_uid_123",
+    role: ROLES.WORKER, status: "pending", expiresAtMs: now + 60_000
+  };
+  assert.equal(consumeWorkerInvitation({
+    invitation, shopId: "shop_other_123", uid: "worker_uid_123",
+    deviceId: "f".repeat(32), nowMs: now
+  }).reason, "invitation_target_mismatch");
+  assert.equal(consumeWorkerInvitation({
+    invitation, shopId: shop.shopId, uid: "another_worker_123",
+    deviceId: "f".repeat(32), nowMs: now
+  }).reason, "invitation_target_mismatch");
+});
+
 test("public status uses server time and hides owner UID", () => {
   const active = publicShopStatus(shop, now);
   assert.equal(active.status, "active");
