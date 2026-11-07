@@ -13,7 +13,7 @@ into the Android application.
 ## Suggested Firestore structure
 - shops/{shopId}: ownerUid, status, subscriptionExpiresAtMs, schemaVersion.
 - shops/{shopId}/members/{uid}: uid, role (owner/worker), status.
-- shops/{shopId}/devices/{deviceId}: deviceId, uid, role, status, approvedByUid, createdAt.
+- shops/{shopId}/devices/{deviceId}__{uid}: deviceId, uid, role, status, approvedByUid, createdAt. The composite key allows one physical phone to have separate owner and worker sign-in enrollments without overwriting either.
 - shops/{shopId}/customers/{customerId}: profile, revision, archivedAt.
 - shops/{shopId}/ledger/{eventId}: immutable debt/payment event.
 
@@ -26,7 +26,11 @@ pending invitation tied to the exact shop and worker UID, plus approval from a
 verified owner session backed by the owner's active member and device records.
 Invitations expire and cannot be reused as proof of owner authority. Full owner
 access on a replacement phone requires the owner to authenticate as the same
-primary owner account and register that phone with a new device ID. A shop ID,
+primary owner account and register that account on the phone. If the owner
+signs in on the worker's already-enrolled phone, the physical device ID stays
+the same; a separate device enrollment keyed by device ID plus owner UID is
+created, so the worker enrollment is preserved. No device ID is cloned from
+the owner's old phone. A shop ID,
 local-storage edit, or client-side role change is insufficient. This prototype
 does not let an arbitrary worker UID become the primary owner UID.
 
