@@ -20,6 +20,9 @@ The isolated Arabic UI is in `keygen-v3/index.html` and `keygen-v3/ui.js`.
 - The visible private-key field is cleared after successful use; no key is written to localStorage or sent over the network.
 - The UI references the shared `license-v3.js` signing implementation. It is a lab-only page and is not packaged into the customer keygen APK.
 
+## Version routing and migration
+`license-version-router.js` routes DEYN2 only to the legacy verifier and DEYN3 only to the v3 verifier. A rejected DEYN3 code never falls back to DEYN2. See `LICENSING_V2_TO_V3_MIGRATION_PLAN.md` before any integration; the plan preserves old device IDs and license records and requires separate v3 storage.
+
 ## Key handling
 The app receives only the raw public key. The issuer receives the PKCS#8 private key at runtime. Never commit, bundle, or share the private key.
 
