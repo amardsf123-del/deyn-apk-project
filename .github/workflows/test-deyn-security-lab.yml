@@ -31,7 +31,7 @@ jobs:
       - name: Run security prototype tests
         run: |
           set -euo pipefail
-          mapfile -t tests < <(find security-lab -type f -path '*/test/*.test.js' | sort)
+          mapfile -t tests < <(find security-lab -type f -path '*/test/*.test.js' ! -path '*/cloud-sync/functions/test/*' | sort)
           test "${#tests[@]}" -gt 0
           node --test "${tests[@]}"
       - name: Set up Java for Firebase Emulator
