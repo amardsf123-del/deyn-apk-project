@@ -19,7 +19,7 @@ This project tests whether the official Ouisync Kotlin/Android bindings can be e
 - Pinned Kotlin artifact version: `0.10.0-0`, published upstream artifact version `0.10.0-0` and Kotlin binding revision `0` at the inspected upstream source revision.
 - Maven coordinates:
   - `ie.equalit.ouinet:ouisync-session:0.10.0-0`
-  - `ie.equalit.ouinet:ouisync-service-android:0.10.0-0`
+  - `ie.equalit.ouinet:ouisync-service:0.10.0-0`
 
 ## Local-only configuration in this POC
 
