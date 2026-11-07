@@ -82,6 +82,25 @@ jobs:
               k, n = re.subn(r"const PUBLIC_KEY\s*=\s*'[^']+';", "const PUBLIC_KEY='"+public_key+"';", k, count=1)
               if n != 1: raise SystemExit('Could not locate the key-generator public key')
               kg.write_text(k,encoding='utf-8')
+              # Make PEM import tolerant of UTF-8 BOM and invisible Unicode whitespace,
+              # and return a clear Arabic validation error instead of the raw atob exception.
+              k = kg.read_text(encoding='utf-8')
+              old_b64 = "const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));"
+              new_b64 = """function pemBytes(pem){
+ const text=String(pem||'').replace(/^\\uFEFF/,'').trim();
+ const match=text.match(/-----BEGIN PRIVATE KEY-----([\\s\\S]*?)-----END PRIVATE KEY-----/);
+ if(!match)throw Error('ملف المفتاح غير صالح. اختر ملف DEYN_PRIVATE.pem وليس ملف ZIP أو المفتاح العام');
+ const body=match[1].replace(/[\\s\\uFEFF\\u200B-\\u200D\\u2060]/g,'');
+ if(/[^^\\x00-\\x7F]/.test(body))throw Error('ملف PEM يحتوي على أحرف غير صالحة. أعد اختيار ملف DEYN_PRIVATE.pem الأصلي');
+ if(!/^[A-Za-z0-9+/]+={0,2}$/.test(body)||body.length%4!==0)throw Error('محتوى المفتاح غير مكتمل أو ليس بصيغة PEM صحيحة');
+ try{return Uint8Array.from(atob(body),c=>c.charCodeAt(0));}
+ catch(e){throw Error('تعذّر قراءة ترميز المفتاح. اختر ملف DEYN_PRIVATE.pem الأصلي من ZArchiver');}
+}
+const b64=s=>{try{return Uint8Array.from(atob(s),c=>c.charCodeAt(0));}catch(e){throw Error('بيانات المفتاح العام داخل التطبيق غير صالحة');}};"""
+              if old_b64 not in k: raise SystemExit('Could not locate the Base64 decoder in Keygen')
+              k = k.replace(old_b64,new_b64,1)
+              k = k.replace("b64(body),{name:'Ed25519'}","pemBytes(pem),{name:'Ed25519'}",1)
+              kg.write_text(k,encoding='utf-8')
               tmp = archive.with_suffix('.tmp.zip')
               with zipfile.ZipFile(tmp,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
                   for p in sorted(root.rglob('*')):
