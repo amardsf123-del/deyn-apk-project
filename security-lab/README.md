@@ -78,3 +78,13 @@ The old app and key generator share an embedded HMAC secret. Replacing that syst
 - Added `recovery-mode/SAFE_START_INTEGRATION_MAP.md` showing where a read-only data-integrity gate must run before license boot. It explicitly preserves the first-run demo seed and Settings reset feature, while blocking only damaged/unavailable existing storage.
 - The gate must not bypass licensing or expose normal debt UI. Existing activation, `fcb1899`, and owner/worker behavior remain outside the recovery change.
 - This is a source-mapped plan only. No app source was integrated, no APK was built, and no production data or `main` branch was touched.
+
+
+## Demo seed and Settings reset compatibility (2026-11-07)
+- Re-inspected the actual Settings UI and reset handlers in the source archive.
+- Confirmed the visible Settings action is `clearData`: after owner confirmation it archives customers, pending tickets, and sequence number as one recoverable `bulk` trash item, then empties the active customer/ticket arrays and persists. It retains other app state such as settings/auth and the trash.
+- Therefore a saved DEYN state with `customers: []` and `pending: []` is valid and must start normally. It is not a fresh install and must not trigger the demo seed or recovery screen.
+- The app also has a separate `wipe` handler that empties those arrays without archiving; no visible `data-act="wipe"` button was found in the inspected Settings HTML. It is treated as apparently unused legacy code and was not changed.
+- Added `recovery-mode/SETTINGS_RESET_BEHAVIOR_AUDIT.md` and 5 compatibility tests. All 5 tests passed locally: fresh install, existing demo data, intentional Settings reset with a bulk-trash record, valid empty state without trash, and damaged existing data.
+- The demo seed and existing Settings reset/trash behavior must remain unchanged. The guard is only for an existing unreadable/invalid stored record or unavailable storage.
+- No app source, production ZIP, APK, or `main` branch was changed.
