@@ -272,3 +272,19 @@ test("only a trusted platform administrator can provision new shops", () => {
   assert.throws(() => assertPlatformAdmin({}), /permission-denied/);
   assert.throws(() => assertPlatformAdmin({ platformAdmin: "true" }), /permission-denied/);
 });
+
+test("trusted subscription renewal updates shop expiry and writes an audit record", async () => {
+  await clearShop();
+  await setupShop();
+  const nextExpiry = clock + 365 * 24 * 60 * 60 * 1000;
+  const result = await service.updateShopSubscription({
+    shopId, subscriptionExpiresAtMs: nextExpiry, actorUid: "platform-admin-1"
+  });
+  assert.equal(result.subscriptionExpiresAtMs, nextExpiry);
+  const shop = await db.collection("shops").doc(shopId).get();
+  assert.equal(shop.data().subscriptionExpiresAtMs, nextExpiry);
+  const audit = await shop.ref.collection("subscriptionAudit").get();
+  assert.equal(audit.size, 1);
+  assert.equal(audit.docs[0].data().previousExpiryMs, null);
+  assert.equal(audit.docs[0].data().newExpiryMs, nextExpiry);
+});
