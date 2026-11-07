@@ -13,8 +13,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/shops/$(shopId)/members/$(uid);
     }
 
-    function devicePath(shopId, deviceId) {
-      return /databases/$(database)/documents/shops/$(shopId)/devices/$(deviceId);
+    // One physical installation may authenticate as the worker or owner.
+    // Keep a separate enrollment record per (deviceId, Firebase UID) pair.
+    function devicePath(shopId, deviceId, uid) {
+      return /databases/$(database)/documents/shops/$(shopId)/devices/$(deviceId + "__" + uid);
     }
 
     function shopActive(shopId) {
@@ -35,7 +37,7 @@ service cloud.firestore {
 
     function activeDevice(shopId) {
       let deviceId = request.auth.token.deviceId;
-      let device = get(devicePath(shopId, deviceId)).data;
+      let device = get(devicePath(shopId, deviceId, request.auth.uid)).data;
       return device.deviceId == deviceId
         && device.shopId == shopId
         && device.uid == request.auth.uid
