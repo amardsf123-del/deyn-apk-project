@@ -6,7 +6,7 @@ import {
 
 const event = (id, time = 1000) => ({
   eventId: id, shopId: "shop-1", customerId: "cust-1",
-  kind: "debt", amountDzd: 500, createdAtMs: time,
+  kind: "debt", amountCentimes: 500, createdAtMs: time,
   deviceId: "device-1", actorUid: "uid-1"
 });
 
@@ -25,7 +25,7 @@ test("re-enqueue of identical event is idempotent", () => {
 
 test("event ID collision with different payload is rejected", () => {
   const queue = enqueueOutbox([], event("a"));
-  assert.throws(() => enqueueOutbox(queue, { ...event("a"), amountDzd: 999 }), /collision/);
+  assert.throws(() => enqueueOutbox(queue, { ...event("a"), amountCentimes: 999 }), /collision/);
 });
 
 test("retry batch only returns pending entries and respects batch size", () => {
