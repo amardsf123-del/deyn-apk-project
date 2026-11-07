@@ -84,3 +84,10 @@ export const revokeDevice = onCall(options, wrap(async (request) => {
     targetDeviceId: request.data?.targetDeviceId
   });
 }));
+
+export const revokeWorkerMembership = onCall(options, wrap(async (request) => {
+  return service.revokeMember({
+    claims: { uid: request.auth.uid, ...request.auth.token },
+    targetUid: request.data?.targetUid
+  });
+}));
