@@ -108,3 +108,5 @@ This confirms the old shared HMAC secret can be removed from the v2 source. It d
 A separate Ed25519 keypair has now been created for the trusted-time service. Its public key is in `trusted-time-worker/client/public-key.js`; its private key is kept outside GitHub and APKs. A manual Cloudflare deployment workflow has been prepared and requires owner-controlled Cloudflare credentials and GitHub Actions secrets before it can be run. No Worker is deployed yet.
 
 A CI workflow was added to run all security-lab JavaScript syntax checks and Node tests on pushes to this branch. The workflow file is present; its first remote run has not yet been confirmed.
+
+The new GitHub Actions security-lab CI has now completed successfully after correcting one test import path: **51 tests passed, 0 failed**, and all JavaScript syntax checks passed (run `42321608221`, commit `7300a047af31b5340ab0b2a472beaab7afa9f957`). These are prototype/unit tests only; they do not replace Android device testing or prove the prototypes are integrated into the app.
