@@ -1,4 +1,11 @@
 {
+  "functions": [
+    {
+      "source": "security-lab/cloud-sync/functions",
+      "codebase": "deyn-cloud-sync",
+      "runtime": "nodejs22"
+    }
+  ],
   "firestore": {
     "rules": "security-lab/cloud-sync/firestore.rules"
   },
