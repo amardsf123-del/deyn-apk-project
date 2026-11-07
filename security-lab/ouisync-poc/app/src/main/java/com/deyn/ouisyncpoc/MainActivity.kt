@@ -44,8 +44,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
-        requestNearbyPermissionIfNeeded()
-        initializeOuisync()
+        if (requestNearbyPermissionIfNeeded()) initializeOuisync()
     }
 
     private fun buildUi() {
@@ -85,15 +84,20 @@ class MainActivity : Activity() {
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
     )
 
-    private fun requestNearbyPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES), 41)
-        } else if (Build.VERSION.SDK_INT < 33 && Build.VERSION.SDK_INT >= 29 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 41)
+    private fun requestNearbyPermissionIfNeeded(): Boolean {
+        val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
+        val needed = Build.VERSION.SDK_INT >= 33 || Build.VERSION.SDK_INT >= 29
+        if (!needed || ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) return true
+        ActivityCompat.requestPermissions(this, arrayOf(permission), 41)
+        return false
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 41 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            initializeOuisync()
+        } else if (requestCode == 41) {
+            status.text = "يجب السماح باكتشاف الأجهزة القريبة لتجربة المزامنة المحلية."
         }
     }
 
@@ -178,7 +182,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        scope.launch(Dispatchers.IO) {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try { session?.close() } catch (_: Exception) {}
             try { service?.stop() } catch (_: Exception) {}
         }
