@@ -67,3 +67,6 @@ The old app and key generator share an embedded HMAC secret. Replacing that syst
 - Raw export is only represented as an explicit user action in the prototype. Actual file creation/download has not been implemented or tested on Android 13/Capacitor WebView.
 - There is no restore/import action and no “continue anyway” path. Recovery mode does not write or clear `deyn.v1`.
 - The prototype and screen specification are isolated lab artifacts, not integrated into the app or production ZIP.
+
+
+- Reviewed recovery export mechanics in `security-lab/recovery-mode/RAW_EXPORT_TECHNICAL_REVIEW.md`: the current app uses a Blob/anchor download for ordinary backup, but there is no evidence it reliably saves files in the installed Android WebView. The app does not currently declare Capacitor Filesystem or Share plugins. No dependency was added; device testing is still required before implementing raw export.
