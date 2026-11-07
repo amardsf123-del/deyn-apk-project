@@ -7,6 +7,7 @@ on:
       - 'scripts/apply-storage-safety.py'
       - 'scripts/apply-ed25519.py.z.b64'
       - 'scripts/ed25519-integration-trigger.txt'
+      - 'scripts/fix-ed25519-code-length.py'
       - '.github/workflows/fix-storage-safety.yml'
   workflow_dispatch:
 
@@ -51,6 +52,8 @@ jobs:
             echo "Ed25519 already integrated; checking the existing source."
             ! grep -q 'DEYN_OFFLINE_SECRET' /tmp/deyn-check/deyn-app/www/index.html
           fi
+      - name: Fix signed activation code input length
+        run: python scripts/fix-ed25519-code-length.py
       - name: Commit updated application archive
         run: |
           git config user.name "github-actions[bot]"
