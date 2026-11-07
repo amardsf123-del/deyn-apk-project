@@ -216,6 +216,32 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
     return { shopId, deviceId, role: member.role, customToken };
   }
 
+  async function revokeMember({ claims, targetUid }) {
+    if (typeof targetUid !== "string" || targetUid.length < 6) fail("invalid-argument");
+    const shopId = claims?.shopId;
+    const uid = claims?.uid;
+    const ownerDeviceId = claims?.deviceId;
+    if (!shopId || !uid || !validDevice(ownerDeviceId)) fail("permission-denied");
+    if (targetUid === uid) fail("failed-precondition");
+    const nowMs = now();
+    await db.runTransaction(async (tx) => {
+      const sRef = shopRef(db, shopId);
+      const ownerM = memberRef(db, shopId, uid);
+      const ownerD = deviceRef(db, shopId, ownerDeviceId, uid);
+      const targetM = memberRef(db, shopId, targetUid);
+      const [sSnap, mSnap, dSnap, targetSnap] = await Promise.all([
+        tx.get(sRef), tx.get(ownerM), tx.get(ownerD), tx.get(targetM)
+      ]);
+      const shop = sSnap.exists ? sSnap.data() : null;
+      assertActiveShop(shop, nowMs);
+      assertOwnerSession(claims, shop, mSnap.data(), dSnap.data());
+      if (!targetSnap.exists) fail("not-found");
+      if (targetSnap.data().role === "owner") fail("failed-precondition");
+      tx.update(targetM, { status: "inactive", revokedAtMs: nowMs, revokedByUid: uid });
+    });
+    return { revoked: true };
+  }
+
   async function revokeDevice({ claims, targetUid, targetDeviceId }) {
     if (typeof targetUid !== "string" || !validDevice(targetDeviceId)) fail("invalid-argument");
     const shopId = claims?.shopId;
@@ -242,6 +268,6 @@ export function createMembershipService({ db, authAdmin, now = () => Date.now(),
 
   return Object.freeze({
     createShop, enrollOwnerDevice, createWorkerInvitation,
-    redeemWorkerInvitationForShop, issueDeviceSession, revokeDevice
+    redeemWorkerInvitationForShop, issueDeviceSession, revokeDevice, revokeMember
   });
 }
