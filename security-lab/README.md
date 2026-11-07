@@ -12,6 +12,8 @@ This branch is an isolated preparation area. Nothing here is included in either 
 - Client-verifier tests passed: valid signed time accepted, nonce mismatch rejected, and altered signature rejected.
 - These are local Node/WebCrypto tests with temporary test keys; Android WebView compatibility and real deployment remain untested.
 - Trusted-time service is not deployed or configured; no endpoint or production key exists.
+- Clock-warning state machine added under `security-lab/clock-warning/`; all 6 Node tests passed, covering network outage, snooze, duplicate/debounced incidents, three warning stages, 48-hour grace, successful verification reset, and lifetime exemption.
+- The warning module is isolated and not connected to app storage or UI.
 - No APK from this branch should be distributed.
 
 ## Why this is separate
