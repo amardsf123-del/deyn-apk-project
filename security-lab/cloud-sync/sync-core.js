@@ -97,3 +97,24 @@ export function updateCustomerProfile(current, patch, role, expectedRevision) {
   }
   return Object.freeze({ ...current, ...patch, revision: current.revision + 1 });
 }
+
+export function summarizeCustomerBalances(events) {
+  const merged = mergeLedgerEvents(events);
+  const summaries = new Map();
+  for (const event of merged) {
+    let item = summaries.get(event.customerId);
+    if (!item) {
+      item = { customerId: event.customerId, debtDzd: 0, paidDzd: 0, balanceDzd: 0, debtCount: 0, paymentCount: 0 };
+      summaries.set(event.customerId, item);
+    }
+    if (event.kind === "debt") {
+      item.debtDzd += event.amountDzd;
+      item.debtCount += 1;
+    } else {
+      item.paidDzd += event.amountDzd;
+      item.paymentCount += 1;
+    }
+    item.balanceDzd = item.debtDzd - item.paidDzd;
+  }
+  return summaries;
+}
