@@ -2,7 +2,7 @@ name: Test DEYN Ouisync POC
 
 on:
   push:
-    branches: [cloud-sync-lab]
+    branches: [cloud-sync-lab, ouisync-poc]
     paths:
       - "security-lab/ouisync-poc/**"
       - ".github/workflows/test-ouisync-poc.yml"
