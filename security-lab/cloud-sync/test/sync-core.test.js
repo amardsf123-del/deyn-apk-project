@@ -30,9 +30,10 @@ test("worker cannot edit/delete customers or ledger entries", () => {
 
 test("owner can perform all supported actions", () => {
   for (const action of [
-    "read", "createCustomer", "addDebt", "addPayment",
-    "editCustomer", "deleteCustomer", "editLedgerEntry", "deleteLedgerEntry"
+    "read", "createCustomer", "addDebt", "addPayment", "editCustomer", "deleteCustomer"
   ]) assert.equal(authorize("owner", action), true);
+  assert.equal(authorize("owner", "editLedgerEntry"), false);
+  assert.equal(authorize("owner", "deleteLedgerEntry"), false);
 });
 
 test("unknown role and unknown action are denied", () => {
