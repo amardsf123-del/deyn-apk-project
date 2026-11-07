@@ -28,6 +28,19 @@ jobs:
           done
       - name: Install cloud membership backend dependencies
         run: npm install --prefix security-lab/cloud-sync/functions
+      - name: Report dependency advisories for backend prototype
+        run: |
+          set -euo pipefail
+          npm audit --prefix security-lab/cloud-sync/functions --json > "$RUNNER_TEMP/deyn-functions-audit.json" || true
+          node -e '
+            const a = require(process.env.RUNNER_TEMP + "/deyn-functions-audit.json");
+            for (const [name, v] of Object.entries(a.vulnerabilities || {})) {
+              process.stdout.write(JSON.stringify({
+                package: name, severity: v.severity, direct: v.isDirect,
+                range: v.range, fixAvailable: v.fixAvailable
+              }) + "\n");
+            }
+          '
       - name: Check Capacitor 8 Firebase bridge dependency compatibility
         run: |
           set -euo pipefail
