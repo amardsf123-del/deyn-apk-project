@@ -57,3 +57,13 @@ The old app and key generator share an embedded HMAC secret. Replacing that syst
 - The current production startup flow remains unchanged until backup/recovery UI and on-device validation are designed and tested.
 
 - Reviewed current backup path in `BACKUP_RESTORE_REVIEW.md`: current JSON button exports the entire `S` object (including auth fields) and no import/restore path was found in inspected source. The file must be treated as confidential. No backup/restore code was changed.
+
+
+## Recovery-mode work (2026-11-07)
+- Added `security-lab/recovery-mode/RECOVERY_SCREEN_SPEC.md` with Arabic screen wording and strict safe-start/export rules.
+- Added a pure recovery-mode controller prototype and 9 Node tests. All 9 passed locally.
+- Tests cover: truly absent key, valid existing record, malformed JSON, invalid schema, storage read exceptions, blocking normal app/seed/write/import while recovering, explicit byte-for-byte raw export, invalid recovery-session creation, and unexpected stored value types.
+- Important distinction: a storage read exception is **not** a new installation. Startup must block rather than seed demo data.
+- Raw export is only represented as an explicit user action in the prototype. Actual file creation/download has not been implemented or tested on Android 13/Capacitor WebView.
+- There is no restore/import action and no “continue anyway” path. Recovery mode does not write or clear `deyn.v1`.
+- The prototype and screen specification are isolated lab artifacts, not integrated into the app or production ZIP.
