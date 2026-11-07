@@ -1,0 +1,8 @@
+{
+  "name": "deyn-trusted-time-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
