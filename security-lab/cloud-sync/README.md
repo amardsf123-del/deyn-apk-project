@@ -41,4 +41,4 @@ Offline changes are provisional until the backend accepts them. The UI must dist
 
 ## Current result
 
-The isolated tests cover the pure merge and permission rules. They do not prove Firestore deployment, authentication, Android offline persistence, or integration with the existing app. The app source has not been modified and no cloud data is being transmitted.
+The isolated tests cover the pure merge and permission rules, including a 600-customer analytics fixture and duplicate-event handling. The summary routine aggregates debt, payments, balances, and counts in one pass after deduplication; this is a logic-scale test, not an Android performance benchmark. They do not prove Firestore deployment, authentication, Android offline persistence, or integration with the existing app. The app source has not been modified and no cloud data is being transmitted.
