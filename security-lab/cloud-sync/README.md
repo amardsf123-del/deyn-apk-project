@@ -35,7 +35,7 @@ App Check is enforced on callable endpoints. Worker invitations require a verifi
 
 ## Automated verification
 
-Latest passing workflow before the final admin-provisioning hardening: [42382123122](https://github.com/amardsf123-del/deyn-apk-project/actions/runs/42382123122). The admin-provisioning guard and its test are in the current CI run; see the latest branch run for the final result.
+Latest passing workflow: [42382365427](https://github.com/amardsf123-del/deyn-apk-project/actions/runs/42382365427).
 
 | Test group | Passed | Failed |
 |---|---:|---:|
