@@ -46,7 +46,7 @@ function assertActiveShop(shop, nowMs) {
 function assertOwnerSession(claims, shop, member, device) {
   if (!claims || claims.memberRole !== "owner" ||
       claims.shopId !== shop.shopId ||
-      claims.deviceId !== device.deviceId ||
+      claims.deviceId !== device?.deviceId ||
       claims.uid !== shop.ownerUid ||
       member?.uid !== claims.uid || member?.role !== "owner" || member?.status !== "active" ||
       device?.uid !== claims.uid || device?.deviceId !== claims.deviceId ||
