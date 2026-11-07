@@ -90,6 +90,8 @@ service cloud.firestore {
           && request.resource.data.amountDzd is int
           && request.resource.data.amountDzd > 0
           && request.resource.data.createdAtMs is int
+          && request.resource.data.createdAtMs > 0
+          && request.resource.data.createdAtMs <= request.time.toMillis() + 300000
           && request.resource.data.deviceId == request.auth.token.deviceId
           && request.resource.data.actorUid == request.auth.uid;
         allow update, delete: if false;
