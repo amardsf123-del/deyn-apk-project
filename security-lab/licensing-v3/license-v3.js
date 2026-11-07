@@ -27,6 +27,19 @@ function decodeBase64(value) {
   return new Uint8Array(Buffer.from(b64, "base64"));
 }
 
+function base64UrlToBytes(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error("Invalid base64url data");
+  }
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+  if (typeof atob === "function") {
+    const binary = atob(padded);
+    return Uint8Array.from(binary, c => c.charCodeAt(0));
+  }
+  return new Uint8Array(Buffer.from(padded, "base64"));
+}
+
 function decodePrivateKeyInput(value) {
   if (typeof value !== "string") return new Uint8Array(value);
   const pem = value.trim();
