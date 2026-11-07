@@ -87,8 +87,8 @@ service cloud.firestore {
           && request.resource.data.customerId is string
           && exists(/databases/$(database)/documents/shops/$(shopId)/customers/$(request.resource.data.customerId))
           && request.resource.data.kind in ["debt", "payment"]
-          && request.resource.data.amountDzd is int
-          && request.resource.data.amountDzd > 0
+          && request.resource.data.amountCentimes is int
+          && request.resource.data.amountCentimes > 0
           && request.resource.data.createdAtMs is int
           && request.resource.data.createdAtMs > 0
           && request.resource.data.createdAtMs <= request.time.toMillis() + 300000
