@@ -27,18 +27,22 @@ export function validateLedgerEvent(event) {
   if (!["debt", "payment"].includes(event.kind)) {
     throw new TypeError("kind must be debt or payment");
   }
-  if (!Number.isSafeInteger(event.amountDzd) || event.amountDzd <= 0) {
-    throw new TypeError("amountDzd must be a positive safe integer");
+  if (!Number.isSafeInteger(event.amountCentimes) || event.amountCentimes <= 0) {
+    throw new TypeError("amountCentimes must be a positive safe integer");
   }
   if (!Number.isSafeInteger(event.createdAtMs) || event.createdAtMs <= 0) {
     throw new TypeError("createdAtMs must be a positive safe integer");
+  }
+  if (event.note !== undefined && (typeof event.note !== "string" || event.note.length > 1000)) {
+    throw new TypeError("note must be a string of at most 1000 characters");
   }
   return Object.freeze({
     eventId: event.eventId,
     shopId: event.shopId,
     customerId: event.customerId,
     kind: event.kind,
-    amountDzd: event.amountDzd,
+    amountCentimes: event.amountCentimes,
+    note: typeof event.note === "string" ? event.note : "",
     createdAtMs: event.createdAtMs,
     deviceId: event.deviceId,
     actorUid: event.actorUid
@@ -104,7 +108,7 @@ export function summarizeCustomerBalances(events) {
   for (const event of merged) {
     let item = summaries.get(event.customerId);
     if (!item) {
-      item = { customerId: event.customerId, debtDzd: 0, paidDzd: 0, balanceDzd: 0, debtCount: 0, paymentCount: 0 };
+      item = { customerId: event.customerId, debtCentimes: 0, paidCentimes: 0, balanceCentimes: 0, debtCount: 0, paymentCount: 0 };
       summaries.set(event.customerId, item);
     }
     if (event.kind === "debt") {
@@ -114,7 +118,7 @@ export function summarizeCustomerBalances(events) {
       item.paidDzd += event.amountDzd;
       item.paymentCount += 1;
     }
-    item.balanceDzd = item.debtDzd - item.paidDzd;
+    item.balanceCentimes = item.debtCentimes - item.paidCentimes;
   }
   return summaries;
 }
