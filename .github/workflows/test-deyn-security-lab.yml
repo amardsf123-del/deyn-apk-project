@@ -5,6 +5,7 @@ on:
     branches: [security-v2-lab, cloud-sync-lab]
     paths:
       - "security-lab/**"
+      - "firebase.cloud-sync.json"
       - ".github/workflows/test-deyn-security-lab.yml"
   workflow_dispatch:
 
@@ -31,3 +32,18 @@ jobs:
           mapfile -t tests < <(find security-lab -type f -path '*/test/*.test.js' | sort)
           test "${#tests[@]}" -gt 0
           node --test "${tests[@]}"
+      - name: Set up Java for Firebase Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install Firebase emulator test dependencies
+        run: npm install --prefix security-lab/cloud-sync/emulator-tests
+      - name: Test Firestore rules in the Firebase Emulator
+        run: |
+          set -euo pipefail
+          ./security-lab/cloud-sync/emulator-tests/node_modules/.bin/firebase emulators:exec \
+            --config firebase.cloud-sync.json \
+            --project demo-deyn-sync \
+            --only firestore \
+            "npm --prefix security-lab/cloud-sync/emulator-tests run test:rules"
