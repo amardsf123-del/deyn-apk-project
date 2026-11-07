@@ -1,0 +1,1 @@
+Run the Ed25519 integration patch and debug build once.
