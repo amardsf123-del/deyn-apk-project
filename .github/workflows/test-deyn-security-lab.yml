@@ -33,6 +33,19 @@ jobs:
           set -euo pipefail
           npm install --prefix security-lab/cloud-sync/capacitor8-bridge-test
           npm ls --prefix security-lab/cloud-sync/capacitor8-bridge-test --depth=0
+      - name: Report dependency advisories for Capacitor bridge prototype
+        run: |
+          set -euo pipefail
+          npm audit --prefix security-lab/cloud-sync/capacitor8-bridge-test --json > "$RUNNER_TEMP/deyn-bridge-audit.json" || true
+          node -e '
+            const a = require(process.env.RUNNER_TEMP + "/deyn-bridge-audit.json");
+            for (const [name, v] of Object.entries(a.vulnerabilities || {})) {
+              process.stdout.write(JSON.stringify({
+                package: name, severity: v.severity, direct: v.isDirect,
+                range: v.range, fixAvailable: v.fixAvailable
+              }) + "\n");
+            }
+          '
       - name: Run security prototype tests
         run: |
           set -euo pipefail
