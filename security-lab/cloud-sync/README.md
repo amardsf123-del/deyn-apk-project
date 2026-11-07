@@ -22,7 +22,7 @@ Use Firebase Authentication + Cloud Firestore, with one `shopId` for each shop a
 
 The `functions/` package now contains Firebase callable backend prototypes:
 
-- Create shop and initial owner device enrollment.
+- Provision a shop and initial owner device enrollment only through a trusted platform administrator after purchase/activation approval; ordinary users cannot create themselves an unlimited subscription.
 - Register another owner device after recent owner re-authentication.
 - Create expiring, email-bound, single-use worker invitations.
 - Redeem an invitation using one Firestore transaction that consumes the invite and registers the worker membership/device.
@@ -35,14 +35,14 @@ App Check is enforced on callable endpoints. Worker invitations require a verifi
 
 ## Automated verification
 
-Latest passing workflow: [42382123122](https://github.com/amardsf123-del/deyn-apk-project/actions/runs/42382123122).
+Latest passing workflow before the final admin-provisioning hardening: [42382123122](https://github.com/amardsf123-del/deyn-apk-project/actions/runs/42382123122). The admin-provisioning guard and its test are in the current CI run; see the latest branch run for the final result.
 
 | Test group | Passed | Failed |
 |---|---:|---:|
 | Existing security and sync logic | 109 | 0 |
 | Firestore Security Rules emulator | 15 | 0 |
-| Backend membership transactions | 12 | 0 |
-| **Total** | **136** | **0** |
+| Backend membership transactions | 13 | 0 |
+| **Total** | **137** | **0** |
 
 Rules tests cover worker permissions, owner profile revisions/archive, append-only ledger, forged role, cross-shop isolation, expired subscriptions, protected shop/invitation metadata, invalid timestamps and device mismatches.
 
