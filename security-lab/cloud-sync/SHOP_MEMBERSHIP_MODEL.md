@@ -24,7 +24,7 @@ keeps its own independent 128-bit device ID while referring to the same shop.
 A worker phone stays a worker phone by default. Worker enrollment requires a
 pending invitation tied to the exact shop and worker UID, plus approval from a
 verified owner session backed by the owner's active member and device records.
-Invitations expire and cannot be reused as proof of owner authority. Full owner
+Invitations expire and are single-use: the trusted backend must atomically mark one used in the same Firestore transaction that registers the worker device. Replays must fail. Full owner
 access on a replacement phone requires the owner to authenticate as the same
 primary owner account and register that account on the phone. If the owner
 signs in on the worker's already-enrolled phone, the physical device ID stays
