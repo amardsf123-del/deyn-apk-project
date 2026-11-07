@@ -21,7 +21,7 @@ test('valid existing record enters normal mode without rewriting it', () => {
 });
 
 test('malformed JSON enters recovery and preserves exact raw string', () => {
-  const raw = '{ "customers": [broken,  }\\n';
+  const raw = '{ "customers": [broken,  }\n';
   const result = inspectStartupStorage(store(raw), 'deyn.v1', valid);
   assert.equal(result.mode, 'recovery');
   assert.equal(result.reason, 'malformed_json');
@@ -54,7 +54,7 @@ test('recovery session blocks app, seed, writes, and unvalidated import', () => 
 });
 
 test('raw export is available only on explicit request and is byte-for-byte unchanged', () => {
-  const raw = '{\\n  "damaged": true,  \\n  "tail": "x"\\n}\\n';
+  const raw = '{\n  "damaged": true,  \n  "tail": "x"\n}\n';
   const startup = inspectStartupStorage(store(raw), 'deyn.v1', valid);
   const session = createRecoverySession(startup);
   assert.equal(session.getExportState(), 'not_requested');
