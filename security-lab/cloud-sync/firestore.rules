@@ -5,58 +5,109 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function shopPath(shopId) {
+      return /databases/$(database)/documents/shops/$(shopId);
+    }
+
+    function memberPath(shopId, uid) {
+      return /databases/$(database)/documents/shops/$(shopId)/members/$(uid);
+    }
+
+    function devicePath(shopId, deviceId) {
+      return /databases/$(database)/documents/shops/$(shopId)/devices/$(deviceId);
+    }
+
+    function shopActive(shopId) {
+      let shop = get(shopPath(shopId)).data;
+      return shop.status == "active"
+        && (shop.subscriptionExpiresAt == null
+          || request.time < shop.subscriptionExpiresAt);
+    }
+
+    function activeMember(shopId) {
+      let member = get(memberPath(shopId, request.auth.uid)).data;
+      return member.uid == request.auth.uid
+        && member.shopId == shopId
+        && member.status == "active"
+        && member.role == request.auth.token.memberRole
+        && request.auth.token.shopId == shopId;
+    }
+
+    function activeDevice(shopId) {
+      let deviceId = request.auth.token.deviceId;
+      let device = get(devicePath(shopId, deviceId)).data;
+      return device.deviceId == deviceId
+        && device.shopId == shopId
+        && device.uid == request.auth.uid
+        && device.status == "active"
+        && device.role == request.auth.token.memberRole;
+    }
+
     function belongsToShop(shopId) {
-      return signedIn() && request.auth.token.shopId == shopId;
+      return signedIn()
+        && request.auth.token.shopId == shopId
+        && request.auth.token.memberRole in ["owner", "worker"]
+        && request.auth.token.deviceId is string
+        && shopActive(shopId)
+        && activeMember(shopId)
+        && activeDevice(shopId);
     }
 
     function isOwner(shopId) {
-      return belongsToShop(shopId) && request.auth.token.role == "owner";
+      return belongsToShop(shopId) && request.auth.token.memberRole == "owner";
     }
 
     function isWorker(shopId) {
-      return belongsToShop(shopId) && request.auth.token.role == "worker";
+      return belongsToShop(shopId) && request.auth.token.memberRole == "worker";
     }
 
     match /shops/{shopId} {
-      // Shop metadata and subscription are server-managed, never client-writable.
       allow read: if belongsToShop(shopId);
       allow write: if false;
 
       match /customers/{customerId} {
         allow read: if belongsToShop(shopId);
-        allow create: if isOwner(shopId) || isWorker(shopId);
-        allow update: if isOwner(shopId);\n        // Soft-delete/archive only; retain linked debt history.\n        allow delete: if false;
+        allow create: if (isOwner(shopId) || isWorker(shopId))
+          && request.resource.data.shopId == shopId;
+        allow update: if isOwner(shopId)
+          && request.resource.data.shopId == resource.data.shopId
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.revision == resource.data.revision + 1;
+        // Archive is an owner-only field update; hard delete is never allowed.
+        allow delete: if false;
       }
 
       match /ledger/{eventId} {
         allow read: if belongsToShop(shopId);
-        // Ledger is append-only. Client updates/deletes are forbidden for all roles.
         allow create: if (isOwner(shopId) || isWorker(shopId))
           && request.resource.data.eventId == eventId
           && request.resource.data.shopId == shopId
           && request.resource.data.customerId is string
+          && exists(/databases/$(database)/documents/shops/$(shopId)/customers/$(request.resource.data.customerId))
           && request.resource.data.kind in ["debt", "payment"]
           && request.resource.data.amountDzd is int
           && request.resource.data.amountDzd > 0
           && request.resource.data.createdAtMs is int
-          && request.resource.data.deviceId is string
+          && request.resource.data.deviceId == request.auth.token.deviceId
           && request.resource.data.actorUid == request.auth.uid;
         allow update, delete: if false;
       }
 
       match /devices/{deviceId} {
-        allow read: if belongsToShop(shopId);
-        // Device enrollment/revocation must be performed by trusted backend code.
+        allow read: if isOwner(shopId) || (
+          belongsToShop(shopId) && request.auth.uid == resource.data.uid
+        );
         allow write: if false;
       }
 
       match /members/{memberUid} {
-        allow read: if belongsToShop(shopId) && request.auth.uid == memberUid;
+        allow read: if isOwner(shopId) || (
+          belongsToShop(shopId) && request.auth.uid == memberUid
+        );
         allow write: if false;
       }
     }
 
-    // Deny everything not explicitly listed above.
     match /{document=**} {
       allow read, write: if false;
     }
