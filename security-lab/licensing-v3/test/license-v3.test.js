@@ -127,3 +127,22 @@ test("rejects legacy DEYN2 codes and non-canonical or extended payloads", async 
     expectedDeviceId: "12".repeat(16), trustedNowUtcMs: now, cryptoImpl: webcrypto
   }), null);
 });
+
+test("accepts PKCS8 PEM private key and standard base64 public key inputs", async () => {
+  const { pair } = await exportedPromise;
+  const privateDer = new Uint8Array(await webcrypto.subtle.exportKey("pkcs8", pair.privateKey));
+  const publicRaw = new Uint8Array(await webcrypto.subtle.exportKey("raw", pair.publicKey));
+  const toB64 = bytes => Buffer.from(bytes).toString("base64");
+  const pem = "-----BEGIN PRIVATE KEY-----\\n" +
+    toB64(privateDer).match(/.{1,64}/g).join("\\n") +
+    "\\n-----END PRIVATE KEY-----";
+  const code = await issueLicense({
+    privateKeyPkcs8: pem, deviceId: "ab".repeat(16), tier: "1Y",
+    role: "M", expiryUtcMs: expiry, cryptoImpl: webcrypto
+  });
+  const verified = await verifyLicense({
+    code, publicKeyRaw: toB64(publicRaw), expectedDeviceId: "ab".repeat(16),
+    trustedNowUtcMs: now, cryptoImpl: webcrypto
+  });
+  assert.equal(verified.deviceId, "ab".repeat(16));
+});
