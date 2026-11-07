@@ -99,6 +99,7 @@ test("worker can append a debt or payment event", async () => {
     customerId: "customer-1",
     kind: "debt",
     amountCentimes: 1500,
+    note: "",
     createdAtMs: now,
     deviceId,
     actorUid: "worker-1"
@@ -122,6 +123,7 @@ test("ledger events are append-only for workers and owners", async () => {
     customerId: "customer-1",
     kind: "payment",
     amountCentimes: 500,
+    note: "",
     createdAtMs: now,
     deviceId,
     actorUid: "owner-1"
@@ -176,6 +178,7 @@ test("ledger writes require an existing customer and positive integer amount", a
     customerId: "does-not-exist",
     kind: "debt",
     amountCentimes: 100,
+    note: "",
     createdAtMs: now,
     deviceId,
     actorUid: "worker-1"
@@ -217,6 +220,7 @@ test("ledger rejects future timestamps and mismatched device identity", async ()
     customerId: "customer-1",
     kind: "debt",
     amountCentimes: 250,
+    note: "",
     createdAtMs: now,
     deviceId,
     actorUid: "worker-1"
