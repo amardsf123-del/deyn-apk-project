@@ -4,12 +4,13 @@ This package is isolated under `cloud-sync-lab`. It is not deployed and is not c
 
 ## Callable operations
 
-- `createShop`: first signed-in account creates a shop, owner membership and initial device enrollment.
-- `enrollOwnerDevice`: the primary owner can register a replacement/second phone after recent Firebase re-authentication.
+- `createShop`: a signed-in, verified-email account creates the shop, owner membership and first device enrollment.
+- `enrollOwnerDevice`: the primary owner registers a second/replacement phone after recent Firebase re-authentication.
 - `createWorkerInvitation`: an authenticated owner creates an email-bound, expiring, single-use invitation. Only a SHA-256 hash of the secret is stored.
-- `redeemWorkerInvitation`: a verified-email worker redeems the invitation; Firestore transaction consumes it and creates membership/device enrollment atomically.
+- `redeemWorkerInvitation`: a verified-email worker redeems the invitation; one Firestore transaction consumes it and creates membership/device enrollment.
 - `issueDeviceSession`: returns a fresh device-specific Firebase custom token after checking shop, member and device status.
-- `revokeDevice`: owner revokes an enrolled device; rules re-check its status on subsequent data access.
+- `revokeDevice`: owner revokes one enrolled device.
+- `revokeWorkerMembership`: owner disables a worker account for the shop; the member status immediately blocks all that worker's enrolled devices under Firestore rules.
 
 All callable endpoints require Firebase App Check. Firebase Authentication must be enabled, worker email addresses must be verified, and the client must sign in with the returned custom token to obtain the session claims.
 
@@ -21,10 +22,19 @@ The client must keep each returned custom token short-lived and must not write c
 
 ## Transactional invitation safety
 
-Invitation consumption, member creation and device registration happen in one Firestore transaction. A second redemption sees the invitation as used and is rejected. The raw invitation secret is returned once and is never stored in Firestore. If custom-token minting fails after the transaction commits, the already-enrolled device can request a new session through `issueDeviceSession`; the invitation does not need to be reused.
+Invitation consumption, member creation and device registration happen in one Firestore transaction. Concurrent redemption attempts are tested: only one can consume the invitation. The raw invitation secret is returned once and is never stored in Firestore. If custom-token minting fails after the transaction commits, the already-enrolled device can request a new session through `issueDeviceSession`; the invitation does not need to be reused.
 
-## Deployment requirements
+## Automated test coverage
+
+The current GitHub workflow runs:
+- 109 existing JavaScript prototype tests.
+- 15 Firestore Security Rules tests against the Firebase Emulator.
+- 12 backend membership-service tests against the Firestore Emulator, including concurrent invitation redemption, expiry, wrong email, forged owner claims, owner recovery, device revocation, and worker membership revocation.
+
+Latest passing run: [GitHub Actions 42382123122](https://github.com/amardsf123-del/deyn-apk-project/actions/runs/42382123122).
+
+## Deployment requirements and limitations
 
 Before deployment, configure a Firebase project, Authentication providers, Firestore, App Check, Cloud Functions billing/region, and the app's Firebase configuration. Deploy only after emulator tests and a review of the app's authentication UX. Never commit service-account keys or secrets.
 
-The functions package is currently a backend prototype. It does not yet implement subscription payment processing, owner-controlled subscription extension, account deletion, or the app-side Firebase custom-token sign-in and native Firestore bridge. No real shop data is transmitted.
+The functions package is still a backend prototype. It does not implement subscription payment processing, owner-controlled subscription extension, account deletion, or the app-side Firebase custom-token sign-in and native Firestore bridge. No real shop data is transmitted.
