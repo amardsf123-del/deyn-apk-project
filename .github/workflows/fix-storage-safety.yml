@@ -39,12 +39,12 @@ jobs:
           mkdir -p /tmp/deyn-check
           unzip -q deyn-apk-project.zip -d /tmp/deyn-check
           if ! grep -q 'var DEYN_PUBLIC_KEY' /tmp/deyn-check/deyn-app/www/index.html; then
-            python - <<'PY'
-            import base64, zlib
-            from pathlib import Path
-            payload = Path('scripts/apply-ed25519.py.z.b64').read_text().strip()
-            Path('scripts/apply-ed25519.py').write_bytes(zlib.decompress(base64.b64decode(payload)))
-            PY
+          python - <<'PY'
+          import base64, zlib
+          from pathlib import Path
+          payload = Path('scripts/apply-ed25519.py.z.b64').read_text().strip()
+          Path('scripts/apply-ed25519.py').write_bytes(zlib.decompress(base64.b64decode(payload)))
+          PY
             sed -i "s/\[\['tier',v=>tier=v\],\['role',v=>role=v\]\]/[['tierSeg',v=>tier=v],['roleSeg',v=>role=v]]/" scripts/apply-ed25519.py
             python scripts/apply-ed25519.py
           else
