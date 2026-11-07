@@ -28,6 +28,11 @@ jobs:
           done
       - name: Install cloud membership backend dependencies
         run: npm install --prefix security-lab/cloud-sync/functions
+      - name: Apply non-breaking backend dependency security updates
+        run: |
+          set -euo pipefail
+          npm audit fix --prefix security-lab/cloud-sync/functions
+          npm ls --prefix security-lab/cloud-sync/functions --depth=0
       - name: Report dependency advisories for backend prototype
         run: |
           set -euo pipefail
