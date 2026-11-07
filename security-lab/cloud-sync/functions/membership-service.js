@@ -10,6 +10,11 @@ const fail = (code) => {
   throw error;
 };
 
+export function assertPlatformAdmin(claims) {
+  if (claims?.platformAdmin !== true) fail("permission-denied");
+  return true;
+}
+
 export function hashInvitationSecret(secret) {
   return createHash("sha256").update(secret, "utf8").digest("hex");
 }
