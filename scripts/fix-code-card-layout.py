@@ -42,12 +42,12 @@ def patch_card(source: str, kind: str):
     pattern = re.compile(CARD_PATTERN.format(kind=re.escape(kind)), re.S)
     def replace(match):
         return (
-            f'<div class="code-card" data-act="{kind}" title="اضغط لنسخ الكود">\\n'
-            '          <div class="code-card__body">\\n'
-            f'            <b class="num code-card__value">{match.group(1)}</b>\\n'
-            f'            <small>{match.group(2)}</small>\\n'
-            '          </div>\\n'
-            f'          <span class="btn sm code-card__btn" style="{match.group(3)}">{match.group(4)}</span>\\n'
+            f'<div class="code-card" data-act="{kind}" title="اضغط لنسخ الكود">\n'
+            '          <div class="code-card__body">\n'
+            f'            <b class="num code-card__value">{match.group(1)}</b>\n'
+            f'            <small>{match.group(2)}</small>\n'
+            '          </div>\n'
+            f'          <span class="btn sm code-card__btn" style="{match.group(3)}">{match.group(4)}</span>\n'
             '        </div>'
         )
     return pattern.subn(replace, source, count=1)
@@ -64,8 +64,8 @@ def main():
             raise SystemExit(f"ERROR: app HTML not found in archive: {APP_REL}")
         source = app.read_text(encoding="utf-8")
         source, old_removed = re.subn(
-            r'\\n?<style id="deyn-long-code-layout-fix">.*?</style>\\n?',
-            '\\n', source, flags=re.S
+            r'\n?<style id="deyn-long-code-layout-fix">.*?</style>\n?',
+            '\n', source, flags=re.S
         )
         if MARK in source:
             if (source.count('class="code-card" data-act="copyMasterCode"') != 1 or
@@ -79,7 +79,7 @@ def main():
                 raise SystemExit(f"ERROR: expected exactly one card of each type (master={n_master}, assistant={n_assistant}); archive not modified")
             if "</head>" not in source:
                 raise SystemExit("ERROR: </head> not found; archive not modified")
-            source = source.replace("</head>", CSS + "\\n</head>", 1)
+            source = source.replace("</head>", CSS + "\n</head>", 1)
             print(f"PASS: patched master and assistant cards; removed old CSS blocks={old_removed}")
         for required in (
             MARK,
@@ -91,7 +91,7 @@ def main():
         ):
             if required not in source:
                 raise SystemExit(f"ERROR: post-patch verification failed: {required}")
-        app.write_text(source, encoding="utf-8", newline="\\n")
+        app.write_text(source, encoding="utf-8", newline="\n")
         temp_archive = ARCHIVE.with_suffix(".zip.tmp")
         with zipfile.ZipFile(temp_archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
             for path in sorted(work.rglob("*")):
