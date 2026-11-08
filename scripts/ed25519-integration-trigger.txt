@@ -1,1 +1,1 @@
-Run the Ed25519 integration patch and debug build once.
+Rebuild trigger: Keygen device ID 32-character input fix, PEM parser idempotency.
