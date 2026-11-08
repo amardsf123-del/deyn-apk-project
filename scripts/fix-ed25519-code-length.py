@@ -26,21 +26,28 @@ with tempfile.TemporaryDirectory() as td:
 html,body{width:100%;max-width:100%;overflow-x:hidden}
 *,*::before,*::after{box-sizing:border-box}
 [data-act="copyMasterCode"],[data-act="copyAssistantCode"]{
-  display:flex;width:100%;max-width:100%;min-width:0;overflow:hidden;
-  align-items:center;justify-content:space-between;gap:10px
+  display:grid!important;grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;column-gap:10px;width:100%;max-width:100%;
+  min-width:0;overflow:hidden
 }
 [data-act="copyMasterCode"]>div:first-child,
 [data-act="copyAssistantCode"]>div:first-child{
-  flex:1 1 0;min-width:0;width:0;max-width:100%;overflow:hidden
+  display:block;min-width:0!important;width:auto!important;
+  max-width:100%!important;overflow:hidden
 }
 [data-act="copyMasterCode"] b.num,
 [data-act="copyAssistantCode"] b.num{
-  display:block;width:100%;max-width:100%;min-width:0;
-  white-space:normal!important;overflow-wrap:anywhere!important;
-  word-break:break-all!important;line-height:1.55
+  display:block!important;width:100%!important;max-width:100%!important;
+  min-width:0!important;white-space:normal!important;
+  overflow-wrap:anywhere!important;word-wrap:break-word!important;
+  word-break:break-all!important;line-height:1.55;
+  direction:ltr;unicode-bidi:plaintext;text-align:left;
+  letter-spacing:normal!important
 }
 [data-act="copyMasterCode"]>span,
-[data-act="copyAssistantCode"]>span{flex:0 0 auto;white-space:nowrap}
+[data-act="copyAssistantCode"]>span{
+  grid-column:2;white-space:nowrap;max-width:100%;flex:none
+}
 </style>
 """
     if 'id="deyn-long-code-layout-fix"' not in source:
