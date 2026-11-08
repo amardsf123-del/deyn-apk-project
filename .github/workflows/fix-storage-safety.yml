@@ -9,6 +9,7 @@ on:
       - 'scripts/ed25519-integration-trigger.txt'
       - 'scripts/fix-ed25519-code-length.py'
       - 'scripts/fix-keygen-pem.py'
+      - 'scripts/fix-keygen-device-id-length.py'
       - '.github/workflows/fix-storage-safety.yml'
   workflow_dispatch:
 
@@ -95,6 +96,8 @@ jobs:
           PY
       - name: Fix PEM Unicode decoding in Keygen
         run: python scripts/fix-keygen-pem.py
+      - name: Fix Keygen device ID input length
+        run: python scripts/fix-keygen-device-id-length.py
       - name: Commit updated application archive
         run: |
           git config user.name "github-actions[bot]"
