@@ -18,20 +18,25 @@ with tempfile.TemporaryDirectory() as td:
     elif new not in source:
         raise SystemExit("Activation code input changed; refusing unsafe edit")
 
-    # Keep long signed activation codes inside their card instead of expanding
-    # the page horizontally. Preserve selectable text and existing copy controls.
     css = """
 <style id="deyn-long-code-layout-fix">
-html,body{max-width:100%;overflow-x:hidden}
+html,body{width:100%;max-width:100%;overflow-x:hidden}
 *,*::before,*::after{box-sizing:border-box}
-.ag-id,.ag-code,.ag-code-value,.license-code,.activation-code,.code-value,
-[id*="code" i],[class*="code" i]{
-  max-width:100%;
-  min-width:0;
-  white-space:normal!important;
-  overflow-wrap:anywhere!important;
-  word-break:break-all;
+[data-act="copyMasterCode"],[data-act="copyAssistantCode"]{
+  width:100%;max-width:100%;min-width:0;overflow:hidden
 }
+[data-act="copyMasterCode"]>div:first-child,
+[data-act="copyAssistantCode"]>div:first-child{
+  flex:1 1 0;min-width:0;max-width:100%;overflow:hidden
+}
+[data-act="copyMasterCode"] b.num,
+[data-act="copyAssistantCode"] b.num{
+  display:block;width:100%;max-width:100%;min-width:0;
+  white-space:normal!important;overflow-wrap:anywhere!important;
+  word-break:break-all!important;line-height:1.55
+}
+[data-act="copyMasterCode"]>span,
+[data-act="copyAssistantCode"]>span{flex:0 0 auto}
 </style>
 """
     if 'id="deyn-long-code-layout-fix"' not in source:
@@ -39,10 +44,13 @@ html,body{max-width:100%;overflow-x:hidden}
             raise SystemExit("Could not find </head> to insert long-code layout fix")
         source = source.replace("</head>", css + "\n</head>", 1)
 
-    if 'maxlength="240"' not in source or 'var DEYN_PUBLIC_KEY' not in source:
-        raise SystemExit("Ed25519 activation input validation failed")
-    if 'deyn-long-code-layout-fix' not in source:
-        raise SystemExit("Long-code layout fix was not inserted")
+    required = [
+        'maxlength="240"', 'var DEYN_PUBLIC_KEY',
+        '[data-act="copyMasterCode"] b.num',
+        '[data-act="copyAssistantCode"] b.num'
+    ]
+    if not all(x in source for x in required):
+        raise SystemExit("Activation input or mobile code-card layout verification failed")
 
     app.write_text(source, encoding="utf-8")
     temp = archive.with_suffix(".zip.tmp")
@@ -51,5 +59,6 @@ html,body{max-width:100%;overflow-x:hidden}
             if f.is_file():
                 z.write(f, f.relative_to(work).as_posix())
     temp.replace(archive)
-print("PASS: activation input accepts the complete DEYN3 signed code")
-print("PASS: long activation codes wrap inside the page without horizontal overflow")
+print("PASS: full signed activation code remains intact")
+print("PASS: master and assistant code cards wrap inside the mobile viewport")
+print("PASS: copy controls remain visible and horizontally fixed")
