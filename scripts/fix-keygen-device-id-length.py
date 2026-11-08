@@ -55,6 +55,13 @@ with tempfile.TemporaryDirectory() as td:
         html = html[:pos] + runtime_patch + "\n" + html[pos:]
 
     # Keep the private key available in the current session after successful generation.
+    # Fix result visibility: CSS requires .show; toggling only the hidden attribute is insufficient.
+    old_clear_result = "function clear(){shown='';$('res').hidden=true;$('code').textContent='';}"
+    new_clear_result = "function clear(){shown='';$('res').hidden=true;$('res').classList.remove('show');$('code').textContent='';}"
+    if old_clear_result in html:
+        html = html.replace(old_clear_result, new_clear_result, 1)
+    if "$('res').hidden=false;" in html and "$('res').classList.add('show')" not in html:
+        html = html.replace("$('res').hidden=false;", "$('res').hidden=false;$('res').classList.add('show');", 1)
     old_clear = "$('privateKey').value='';shown=code;"
     if old_clear in html:
         html = html.replace(old_clear, "shown=code;", 1)
