@@ -15,6 +15,10 @@ with tempfile.TemporaryDirectory() as td:
     page = root / "deyn-keygen" / "www" / "index.html"
     html = page.read_text(encoding="utf-8")
 
+    if "function pemBytes(pem)" in html:
+        print("Keygen PEM decoder already patched; keeping existing fix")
+        raise SystemExit(0)
+
     old = "const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));"
     new = r"""function pemBytes(pem){
  const text=String(pem||'').replace(/^\uFEFF/,'').trim();
