@@ -1,0 +1,34 @@
+name: DEYN SMS professional source inspection
+
+on:
+  push:
+    branches: [sms-professional-2026]
+    paths:
+      - '.github/workflows/inspect-sms-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract current project archive
+        run: |
+          set -euo pipefail
+          test -s deyn-apk-project.zip
+          mkdir source
+          unzip -q deyn-apk-project.zip -d source
+          test -s source/deyn-app/www/index.html
+          mkdir -p inspect/deyn-app/www inspect/deyn-app/scripts inspect/deyn-app/android
+          cp source/deyn-app/www/index.html inspect/deyn-app/www/index.html
+          cp source/deyn-app/scripts/prepare-android.sh inspect/deyn-app/scripts/prepare-android.sh
+          find source/deyn-app/android -maxdepth 4 -type f \( -name 'AndroidManifest.xml' -o -name 'MainActivity.java' -o -name 'build.gradle' \) -exec cp --parents {} inspect/ \; 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deyn-source-inspection
+          path: inspect/
+          if-no-files-found: error
+          retention-days: 7
