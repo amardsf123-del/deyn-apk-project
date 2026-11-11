@@ -1,4 +1,5 @@
 name: DEYN SMS integration - debug test only
+# Re-run after Capacitor permission-state import fix
 
 on:
   push:
