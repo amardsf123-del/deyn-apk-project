@@ -70,7 +70,14 @@ jobs:
           node trusted-time/test.mjs
           node sync/test_engine.mjs
           node sync/test_session.mjs
-          python3 -m unittest discover -s tests/e2e -v
+          # These legacy test files execute their own runner and call sys.exit at module scope;
+          # unittest discovery imports them and falsely reports SystemExit as import errors.
+          # Run each suite as a standalone process instead, with its image-test dependencies.
+          python3 -m pip install --disable-pip-version-check opencv-python-headless numpy
+          for test_file in tests/e2e/test_*.py; do
+            echo "===== Running ${test_file} ====="
+            python3 "${test_file}"
+          done
       - name: Install app dependencies and Android platform
         working-directory: source/deyn-app
         run: |
