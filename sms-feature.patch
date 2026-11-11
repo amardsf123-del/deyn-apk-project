@@ -1,0 +1,180 @@
+--- DEYN-preview.html
++++ DEYN-preview.html
+@@ -12,6 +12,13 @@
+       get:async function(o){var v=localStorage.getItem(P+o.key);if(v===null)throw new Error('missing');return {value:v};},
+       set:async function(o){localStorage.setItem(P+o.key,o.value);return {value:true};},
+       remove:async function(o){localStorage.removeItem(P+o.key);}},
++    DeynSms:{
++      _p:'prompt',
++      checkPermissions:async function(){return {sms:this._p};},
++      requestPermissions:async function(){this._p='granted';return {sms:'granted'};},
++      send:async function(o){console.log('[mock SMS] to',o.phone,':',o.message);return {sent:true};},
++      schedule:async function(o){console.log('[mock SMS schedule]',o.items);return {count:(o.items||[]).length};},
++      getSent:async function(){return {ids:[]};}},
+     Device:{getId:async function(){return {identifier:'test-device-A'};}},
+     Clipboard:{write:async function(o){try{await navigator.clipboard.writeText(o.string||'')}catch(e){}},read:async function(){return {value:''}}}}};
+ })();
+@@ -962,6 +969,7 @@
+ function persist() {
+   if (storageBlocked) return false;
+   if (typeof sySchedule === 'function') sySchedule();
++  if (typeof smsSyncSchedule === 'function') smsSyncSchedule();
+   if (vaultMode) { vaultPending = JSON.stringify(S); vaultKick(); return true; }
+   try {
+     const serialized = JSON.stringify(S);
+@@ -2335,6 +2343,17 @@
+     <div class="row-set"><div><b>الحساب بالسنتيم بالعامية</b></div><label class="sw"><input type="checkbox" data-ch="dialect" ${S.settings.dialect ? 'checked' : ''}><i></i></label></div>
+     <div class="row-set"><div><b>أصوات النقر</b><small>نقرة خفيفة عند كل ضغطة</small></div><label class="sw"><input type="checkbox" data-ch="sound" ${S.settings.sound ? 'checked' : ''}><i></i></label></div>
+     <div class="row-set"><div><b>التنبيهات والإشعارات الذكية</b><small>تنبيه تلقائي بمواعيد السداد وتجاوز السقف</small></div><label class="sw"><input type="checkbox" data-ch="notifs" ${S.settings.notifs ? 'checked' : ''}><i></i></label></div>
++    <div class="row-set" style="flex-wrap:wrap">
++      <div style="flex:1;min-width:0"><b>رسالة تذكير للمتأخرين (SMS)</b><small>يرسل التطبيق رسالة نصية للزبون بعد يوم من تأخره عن موعد السداد. اختيارية، تطلب إذن الرسائل عند التفعيل.</small></div>
++      <label class="sw"><input type="checkbox" data-ch="smsRemind" ${S.settings.smsRemind ? 'checked' : ''}><i></i></label>
++      <div id="smsTplBox" style="width:100%" ${S.settings.smsRemind ? '' : 'hidden'}>
++        <label class="lbl" style="margin-top:8px">نص الرسالة <span style="opacity:.7">({name} الاسم، {amount} المبلغ، {day} يوم الموعد)</span></label>
++        <textarea class="inp" data-in="smsTpl" rows="3" style="height:auto;padding:10px 14px;line-height:1.7;resize:none">${esc(S.settings.smsTpl || SMS_DEFAULT_TPL)}</textarea>
++        <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn sm soft" data-act="smsTest" style="flex:1">إرسال رسالة تجريبية</button></div>
++        <small style="display:block;margin-top:6px;color:var(--mute);font-size:11.5px">تُرسل من شريحة هاتفك وقد تُحتسب حسب عرض الشريحة. تُرسل مرة واحدة فقط لكل زبون في كل دورة.</small>
++      </div>
++    </div>
++
+     <div class="row-set">
+       <div>
+         <b>قفل التطبيق بكلمة المرور</b>
+@@ -3146,6 +3165,8 @@
+     setTimeout(() => openDetail(d.cid), 180);
+   },
+   settings: openSettings,
++  smsConsentOk: () => smsEnableConfirmed(),
++  smsTest: () => smsSendTest(),
+   closeTop: () => closeModal(),
+   confirmOk: () => { const f = CONFIRM; closeModal(); if (f) f(); },
+   go: d => go(d.t),
+@@ -3482,7 +3503,8 @@
+   csearch: el => { LF.q = el.value; renderList(); },
+   aq: el => { AS.q = el.value; fillAssign(); },
+   mm: () => updateMM(),
+-  fceil: () => { if (CF) CF.touched = true; }
++  fceil: () => { if (CF) CF.touched = true; },
++  smsTpl: el => { S.settings.smsTpl = el.value; persist(); }
+ };
+ document.addEventListener('input', e => { const f = e.target.dataset && INPUTS[e.target.dataset.in]; if (f) f(e.target); });
+ document.addEventListener('change', e => {
+@@ -3494,6 +3516,11 @@
+     if (isWorkerDevice()) { e.target.checked = !!S.settings.appLockEnabled; return toast('عذراً، قفل التطبيق خاص بصاحب المحل فقط 🔒', 'err'); }
+     if (e.target.checked && !(S.auth && S.auth.pw)) { e.target.checked = false; toast('عيّن كلمة مرور المالك أولاً ثم فعّل القفل', 'err'); return openSetPasswordModal(false); }
+   }
++  if (k === 'smsRemind') {
++    if (isWorkerDevice()) { e.target.checked = !!S.settings.smsRemind; return toast('هذه الميزة خاصة بصاحب المحل فقط 🔒', 'err'); }
++    if (e.target.checked) { e.target.checked = false; return smsAskEnable(); }
++    S.settings.smsRemind = false; persist(); smsSyncSchedule(); const b = $('#smsTplBox'); if (b) b.hidden = true; return;
++  }
+   S.settings[k] = e.target.checked; persist();
+   if (k === 'dialect') renderAll();
+ });
+@@ -3872,8 +3899,106 @@
+   `);
+ }
+ 
++
++/* ============ SMS reminder for late payers (optional, owner-enabled) ============ */
++const SMS_DEFAULT_TPL = 'السلام عليكم {name}، نذكّرك بأن موعد سداد دينك ({amount} دج) كان يوم {day} من الشهر. نرجو التسوية في أقرب وقت. شكرًا لك 🤝';
++const SMS_MAX_LATE_DAYS = 3;   // never send stale reminders (e.g. right after enabling on old debts)
++const SMS_SEND_HOUR = 9;       // not before 09:00 local time
++const smsPlug = () => { try { return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeynSms) || null; } catch (e) { return null; } };
++function smsPhone(raw) {
++  let d = String(raw || '').replace(/[^\d+]/g, '');
++  if (d.startsWith('00')) d = '+' + d.slice(2);
++  if (d.startsWith('+')) return /^\+\d{9,15}$/.test(d) ? d : null;
++  if (/^0[567]\d{8}$/.test(d)) return '+213' + d.slice(1);   // Algerian mobile
++  return null;
++}
++function smsText(c, pi) {
++  const tpl = (S.settings.smsTpl && S.settings.smsTpl.trim()) || SMS_DEFAULT_TPL;
++  return tpl.replace(/\{name\}/g, c.name).replace(/\{amount\}/g, fmtN(bal(c))).replace(/\{day\}/g, String(pi ? pi.day : c.payDay || ''));
++}
++const smsKey = (c, y, m) => c.id + '|' + y + '-' + (m + 1);
++async function smsPerm(ask) {
++  const p = smsPlug(); if (!p) return 'unavailable';
++  try { const r = await (ask ? p.requestPermissions() : p.checkPermissions()); return (r && r.sms) || 'denied'; } catch (e) { return 'denied'; }
++}
++function smsAskEnable() {
++  if (!smsPlug()) return toast('الإرسال التلقائي يعمل داخل تطبيق الأندرويد فقط', 'err');
++  openModal(() => `${sheetHead('تفعيل رسائل التذكير')}
++    <div class="sub" style="line-height:1.9;margin-bottom:14px">عند التفعيل سيطلب التطبيق إذن <b>إرسال الرسائل النصية (SMS)</b> ليرسل تذكيرًا للزبون الذي تأخر يومًا عن موعد سداده، تلقائيًا ودون تدخل منك. تُرسل الرسائل من شريحة هاتفك وقد تُحتسب حسب عرض شريحتك. يمكنك إيقاف الميزة في أي وقت.</div>
++    <div class="two"><button class="btn" data-act="closeTop">إلغاء</button><button class="btn pri" data-act="smsConsentOk" data-primary>تفعيل ومنح الإذن</button></div>`);
++}
++async function smsEnableConfirmed() {
++  closeModal();
++  const r = await smsPerm(true);
++  if (r !== 'granted') return toast('لم يُمنح إذن الرسائل، لم تُفعَّل الميزة', 'err');
++  if (!S.settings.smsTpl) S.settings.smsTpl = SMS_DEFAULT_TPL;
++  S.settings.smsRemind = true; persist();
++  const cb = document.querySelector('[data-ch=smsRemind]'); if (cb) cb.checked = true;
++  const b = $('#smsTplBox'); if (b) b.hidden = false;
++  toast('تم تفعيل رسائل التذكير ✅');
++  smsRun(); smsSyncSchedule();
++}
++async function smsSendTest() {
++  const to = (S.auth && smsPhone(S.auth.phone)) || null;
++  if (!to) return toast('رقم هاتف المالك غير صالح في الإعدادات', 'err');
++  if (await smsPerm(false) !== 'granted') return toast('إذن الرسائل غير ممنوح', 'err');
++  try { await smsPlug().send({ phone: to, message: smsText({ name: 'محمد', payDay: 5, tx: [{ type: 'debt', amount: 1500 }] }, { day: 5 }) }); toast('أُرسلت رسالة تجريبية إلى رقمك ✅'); }
++  catch (e) { toast('تعذّر الإرسال: ' + (e && e.message || ''), 'err'); }
++}
++let SMS_BUSY = false;
++async function smsRun() {
++  if (SMS_BUSY || !S || !S.settings || !S.settings.smsRemind || isWorkerDevice() || deynReadOnly()) return;
++  const p = smsPlug(); if (!p) return;
++  SMS_BUSY = true;
++  try {
++    if (await smsPerm(false) !== 'granted') { S.settings.smsRemind = false; persist(); return; }
++    try { const r = await p.getSent(); ((r && r.ids) || []).forEach(id => { S.smsLog = S.smsLog || {}; if (!S.smsLog[id]) S.smsLog[id] = Date.now(); }); } catch (e) {}
++    const now = new Date(); if (now.getHours() < SMS_SEND_HOUR) return;
++    S.smsLog = S.smsLog || {};
++    let sent = 0;
++    for (const c of S.customers) {
++      const pi = payInfo(c);
++      if (!pi || pi.status !== 'overdue' || pi.diff < 1 || pi.diff > SMS_MAX_LATE_DAYS) continue;
++      const key = smsKey(c, now.getFullYear(), now.getMonth());
++      if (S.smsLog[key]) continue;
++      const to = smsPhone(c.phone); if (!to) continue;
++      try { await p.send({ phone: to, message: smsText(c, pi) }); S.smsLog[key] = Date.now(); sent++; persist(); } catch (e) { console.warn('SMS failed', e); }
++    }
++    if (sent) toast('أُرسل تذكير إلى ' + sent + ' زبون متأخر 📩');
++  } finally { SMS_BUSY = false; }
++}
++/* Hands the upcoming reminders to the native side so they fire even when the app is closed. */
++let SMS_SYNC_T = null;
++function smsSyncSchedule() {
++  clearTimeout(SMS_SYNC_T);
++  SMS_SYNC_T = setTimeout(async () => {
++    const p = smsPlug(); if (!p || !S) return;
++    const items = [];
++    if (S.settings && S.settings.smsRemind && !isWorkerDevice()) {
++      const now = new Date();
++      for (const c of S.customers) {
++        if (!c.payDay || bal(c) <= 0) continue;
++        const to = smsPhone(c.phone); if (!to) continue;
++        for (let k = 0; k < 2; k++) {
++          const y = now.getFullYear(), m = now.getMonth() + k;
++          const dim = new Date(y, m + 1, 0).getDate();
++          const at = new Date(y, m, Math.min(c.payDay, dim) + 1, SMS_SEND_HOUR, 0, 0).getTime();
++          const key = smsKey(c, new Date(y, m, 1).getFullYear(), new Date(y, m, 1).getMonth());
++          if (at <= Date.now() || (S.smsLog && S.smsLog[key])) continue;
++          items.push({ id: key, phone: to, message: smsText(c, { day: c.payDay }), at });
++          break;
++        }
++      }
++    }
++    try { await p.schedule({ items }); } catch (e) { console.warn('SMS schedule failed', e); }
++  }, 1500);
++}
++setInterval(() => { smsRun(); }, 3600 * 1000);
++document.addEventListener('visibilitychange', () => { if (!document.hidden) smsRun(); });
++
+ function checkSmartNotifs() {
+   updateBellBadge();
++  smsRun(); smsSyncSchedule();
+ }
+ 
+ 
