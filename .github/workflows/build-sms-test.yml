@@ -10,6 +10,14 @@ on:
       - 'sms-feature.patch'
       - 'DeynSmsPlugin.java'
       - 'deyn-apk-project.zip'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-sms-test.yml'
+      - '.github/scripts/integrate_sms.py'
+      - 'sms-feature.patch'
+      - 'DeynSmsPlugin.java'
+      - 'deyn-apk-project.zip'
   workflow_dispatch:
 
 permissions:
