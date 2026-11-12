@@ -69,7 +69,9 @@
   }
   const dateLabel = ts => { const d=new Date(ts); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); };
   const phone = raw => { let s=String(raw||'').replace(/[^\d+]/g,''); if(s.startsWith('00'))s='+'+s.slice(2); if(/^213[567]\d{8}$/.test(s))s='+'+s; if(/^0[567]\d{8}$/.test(s))s='+213'+s.slice(1); return /^\+\d{9,15}$/.test(s)?s:null; };
-  function render(tpl, vars) { return String(tpl||'').replace(/\{(title|name|amount|date|store)\}/g,(_,k)=>String(vars[k]??'')).replace(/[ \\t]{2,}/g,' ').trim(); }\n  // A dedicated one-part Unicode test avoids testing multipart delivery with an unnecessarily long template.\n  function testMessage(date) { return `DEYN: اختبار SMS ناجح - ${String(date||'')}`.trim(); }
+  function render(tpl, vars) { return String(tpl||'').replace(/\{(title|name|amount|date|store)\}/g,(_,k)=>String(vars[k]??'')).replace(/[ \\t]{2,}/g,' ').trim(); }
+  // A dedicated one-part Unicode test avoids testing multipart delivery with an unnecessarily long template.
+  function testMessage(date) { return `DEYN: اختبار SMS ناجح - ${String(date||'')}`.trim(); }
   function buildQueue(S, now) {
     const cfg=config(S.settings&&S.settings.sms||S.settings&&S.settings.smsConfig);
     if(!cfg.enabled || !Array.isArray(S.customers)) return [];
