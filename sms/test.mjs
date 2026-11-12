@@ -50,3 +50,6 @@ const uncertainState={settings:{sms:{enabled:true}},customers:[{id:'u',name:'U',
 
 // Corrupt/partial stored settings fall back to safe defaults rather than silently disabling the queue.
 const safe=C.config({days:[],times:[],start:'00:00',end:'23:59',intervalMinutes:999});assert.deepEqual(JSON.parse(JSON.stringify(safe.days)),[1,4,8,15]);assert.deepEqual(JSON.parse(JSON.stringify(safe.times)),['10:00','11:00','16:00','10:00']);assert.equal(safe.start,'09:00');assert.equal(safe.end,'22:00');assert.equal(safe.intervalMinutes,60);console.log('SMS settings recovery: malformed stored configuration falls back safely');
+
+// Group IDs stay compact even when one customer has a large number of debt events.
+const bulk={settings:{sms:{enabled:true}},customers:[{id:'bulk',name:'Bulk',phone:'0555123456',tx:Array.from({length:250},(_,i)=>({id:'debt-'+i,type:'debt',amount:1,ts:comboNow-20*86400000,dueAt:comboNow-10*86400000}))}],smsLog:{}};const bulkQ=C.buildQueue(bulk,comboNow);assert.ok(bulkQ.every(x=>x.id.length<100));console.log('SMS queue IDs: large grouped reminders keep compact idempotency keys');

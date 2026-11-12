@@ -4,6 +4,7 @@
   const DAY = 86400000;
   const DEFAULTS = Object.freeze({ enabled:false, days:[1,4,8,15], times:['10:00','11:00','16:00','10:00'], start:'09:00', end:'22:00', intervalMinutes:5, tplAr:'السلام عليكم {title} {name}، نذكّركم بأن عليكم مبلغ {amount} دج مستحق منذ {date}. نرجو التسوية عند الإمكان. شكرًا لكم 😊', tplFr:'Bonjour {title} {name}, nous vous rappelons que votre solde de {amount} DA est dû depuis le {date}. Merci de régulariser dès que possible 😊' });
   const clone = x => JSON.parse(JSON.stringify(x));
+  function stableHash(value) { let a=2166136261,b=0x9e3779b9; const s=String(value); for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);a=Math.imul(a^c,16777619);b=Math.imul(b^c,2246822519);}return (a>>>0).toString(36)+(b>>>0).toString(36); }
   const validDate = n => Number.isFinite(Number(n)) && Number(n) > 0;
   const localAt = (base, hhmm) => { const [h,m] = String(hhmm||'09:00').split(':').map(Number); const d = new Date(base); d.setHours(h||0,m||0,0,0); return d.getTime(); };
   const parseTime = s => { const m=/^(\d{2}):(\d{2})$/.exec(String(s||'')); return m && +m[1]<24 && +m[2]<60 ? [+m[1],+m[2]] : null; };
@@ -97,7 +98,7 @@
       for(const [bucket,es] of groups) {
         const debtIds=[...new Set(es.map(x=>x.debtId))].sort();
         const dueSignature=es.map(x=>`${x.debtId}:${x.step}:${Math.floor(x.dueAt)}`).sort().join(',');
-        const key=`${c.id}|${bucket}|${dueSignature}`;
+        const key=`${c.id}|${bucket}|${stableHash(dueSignature)}`;
         if(S.smsLog&&S.smsLog[key]) continue;
         const amount=es.reduce((a,x)=>a+x.remaining,0);
         const due=Math.min(...es.map(x=>x.dueAt));
