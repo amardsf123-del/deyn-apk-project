@@ -118,7 +118,7 @@
       if(item.reminderAt>cursor) cursor=item.reminderAt;
       const atDate=new Date(cursor), m=atDate.getHours()*60+atDate.getMinutes();
       if(m>endMin) { atDate.setDate(atDate.getDate()+1); cursor=localAt(atDate,cfg.start); }
-      item.at=Math.max(cursor,item.reminderAt); if(item.at>cursor) cursor=item.at; out.push(item); cursor+=effectiveGap*60000;
+      item.at=Math.max(cursor,item.reminderAt); item.gapMinutes=effectiveGap; if(item.at>cursor) cursor=item.at; out.push(item); cursor+=effectiveGap*60000;
     }
     return out;
   }
@@ -132,7 +132,9 @@
     const due=open.filter(x=>x.dueAt && now>=localAt(x.dueAt+cfg.days[item.step-1]*DAY,cfg.times[item.step-1]) && !(S.smsLog&&S.smsLog[`${c.id}|${x.debt.id}|${item.step}`]));
     if(!due.length) return {ok:false,reason:'not-due'};
     if(S.smsLog&&S.smsLog[item.key]) return {ok:false,reason:'duplicate'};
-    return {ok:true,customer:c,items:due,amount:due.reduce((a,x)=>a+x.remaining,0)};
+    const amount=due.reduce((a,x)=>a+x.remaining,0);
+    if(Number.isFinite(Number(item.amount))&&Math.abs(amount-Number(item.amount))>0.01)return {ok:false,reason:'amount-changed'};
+    return {ok:true,customer:c,items:due,amount};
   }
   root.DeynSmsCore={DEFAULTS,config,ledger,allocatePayment,extendDebt,buildQueue,validateBeforeSend,phone,nextMonthlyDue,dateLabel};
 })(typeof window!=='undefined'?window:globalThis);

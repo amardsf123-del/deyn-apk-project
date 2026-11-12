@@ -95,7 +95,7 @@
       for(const id of Object.keys(S.smsQueueMeta))if(!active.has(id))delete S.smsQueueMeta[id];
       for(const item of queue){S.smsQueueMeta[item.id]={eventKeys:item.eventKeys,customerName:((S.customers||[]).find(c=>c.id===item.cid)||{}).name||'',phone:item.phone};}
       let durable=true;if(changed||queue.length){try{const saved=originalPersist();if(saved===false)durable=false;else if(typeof deynFlush==='function')await deynFlush();}catch(e){durable=false;console.warn('SMS state flush failed',e);}}
-      const items=queue.filter(x=>!S.smsLog[x.id]&&(x.at>now||Core.validateBeforeSend(S,x,now).ok)).map(x=>({id:x.id,phone:x.phone,message:x.message,at:x.at}));
+      const items=queue.filter(x=>!S.smsLog[x.id]&&(x.at>now||Core.validateBeforeSend(S,x,now).ok)).map(x=>({id:x.id,phone:x.phone,message:x.message,at:x.at,gapMinutes:x.gapMinutes}));
       await p.schedule({items});
     }catch(e){console.warn('SMS queue update failed',e);}
     finally{syncBusy=false;}

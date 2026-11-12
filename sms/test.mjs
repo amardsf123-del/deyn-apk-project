@@ -6,7 +6,7 @@ const a=C.allocatePayment(c,400); assert.equal(a[0].debtId,'d1'); assert.equal(a
 const before=C.ledger(c)[0].dueAt; const ex=C.extendDebt(c,'d2',2,'weeks',999); assert.equal(ex.to,200000+14*86400000); assert.equal(c.tx[1].extensionHistory.length,1);
 const now=Date.now(); const due=now-2*86400000; const S={settings:{sms:{enabled:true}},customers:[{id:'x',name:'A',phone:'0555123456',smsEnabled:true,honorific:'monsieur',smsLang:'ar',tx:[{id:'dx',type:'debt',amount:100,ts:now-4*86400000,dueAt:due}]}],smsLog:{}};
 const q=C.buildQueue(S,now); assert.equal(q.length,4); assert.equal(q[0].phone,'+213555123456'); assert.match(q[0].message,/السيد/); assert.equal(C.validateBeforeSend(S,q[0],now).ok,true);
-S.customers[0].smsEnabled=false; assert.equal(C.validateBeforeSend(S,q[0],now).reason,'customer-disabled');
+S.customers[0].smsEnabled=false; assert.equal(C.validateBeforeSend(S,q[0],now).reason,'customer-disabled'); S.customers[0].smsEnabled=true; S.customers[0].tx[0].amount=150; assert.equal(C.validateBeforeSend(S,q[0],now).reason,'amount-changed');
 console.log('SMS core: allocation, extension, queue, phone normalization, templates, send-time validation passed');
 // Explicit FIFO allocation is stable; a later debt is credited by a payment remainder only when needed.
 const mixed={id:'m',tx:[{id:'old',type:'debt',amount:100,ts:10,dueAt:1000},{id:'pay',type:'pay',amount:150,ts:20,allocations:[{debtId:'old',amount:100}]},{id:'new',type:'debt',amount:200,ts:21,dueAt:2000}]};
