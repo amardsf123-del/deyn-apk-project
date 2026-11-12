@@ -47,3 +47,6 @@ console.log('SMS aggregation: overdue debts from different reminder stages are c
 
 // An uncertain native dispatch remains suppressed to avoid accidental duplicate texts.
 const uncertainState={settings:{sms:{enabled:true}},customers:[{id:'u',name:'U',phone:'0555123456',tx:[{id:'ud',type:'debt',amount:10,ts:comboNow-10*86400000,dueAt:comboNow-5*86400000}]}],smsLog:{}};const uq=C.buildQueue(uncertainState,comboNow)[0];uncertainState.smsLog[uq.eventKeys[0]]={status:'dispatch_uncertain'};assert.equal(C.buildQueue(uncertainState,comboNow).filter(x=>x.at<=comboNow+1000).length,0);console.log('SMS uncertain dispatch: duplicate suppression remains active');
+
+// Corrupt/partial stored settings fall back to safe defaults rather than silently disabling the queue.
+const safe=C.config({days:[],times:[],start:'00:00',end:'23:59',intervalMinutes:999});assert.deepEqual(JSON.parse(JSON.stringify(safe.days)),[1,4,8,15]);assert.deepEqual(JSON.parse(JSON.stringify(safe.times)),['10:00','11:00','16:00','10:00']);assert.equal(safe.start,'09:00');assert.equal(safe.end,'22:00');assert.equal(safe.intervalMinutes,60);console.log('SMS settings recovery: malformed stored configuration falls back safely');

@@ -10,9 +10,9 @@
   function config(raw) {
     const c=Object.assign({},DEFAULTS,raw||{});
     const days=Array.isArray(c.days)&&c.days.length===4?c.days.map(Number):[];
-    c.days=days.every((x,i)=>Number.isInteger(x)&&x>=1&&x<=90&&(i===0||x>days[i-1]))?days:DEFAULTS.days.slice();
+    c.days=days.length===4&&days.every((x,i)=>Number.isInteger(x)&&x>=1&&x<=90&&(i===0||x>days[i-1]))?days:DEFAULTS.days.slice();
     const times=Array.isArray(c.times)&&c.times.length===4?c.times.slice():[];
-    c.times=times.every(x=>!!parseTime(x))?times:DEFAULTS.times.slice();
+    c.times=times.length===4&&times.every(x=>!!parseTime(x))?times:DEFAULTS.times.slice();
     c.start='09:00';
     if (!parseTime(c.end)||c.end<='09:00'||c.end>'22:00') c.end=DEFAULTS.end;
     c.intervalMinutes=Math.max(1,Math.min(60,Number(c.intervalMinutes)||5));
