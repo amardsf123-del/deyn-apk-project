@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const DAY = 86400000;
-  const DEFAULTS = Object.freeze({ enabled:false, days:[1,4,8,15], times:['10:00','11:00','16:00','10:00'], start:'09:00', end:'22:00', intervalMinutes:5, tplAr:'السلام عليكم {title} {name}، نذكّركم بأن عليكم مبلغ {amount} دج مستحق منذ {date}. نرجو التسوية عند الإمكان. شكرًا لكم 😊', tplFr:'Bonjour {title} {name}, nous vous rappelons que votre solde de {amount} DA est dû depuis le {date}. Merci de régulariser dès que possible 😊' });
+  const DEFAULTS = Object.freeze({ enabled:false, days:[1,4,8,15], times:['10:00','11:00','16:00','10:00'], start:'09:00', end:'22:00', intervalMinutes:5, tplAr:'السلام عليكم {title} {name}، نذكّركم بأن عليكم مبلغ {amount} دج مستحق منذ {date}. نرجو التسوية عند الإمكان. شكرًا لكم 😊', tplFr:'Bonjour {title} {name}, nous vous rappelons que votre solde de {amount} DA est dû depuis le {date}. Merci de régulariser dès que possible 😊', storeName:'' });
   const clone = x => JSON.parse(JSON.stringify(x));
   function stableHash(value) { let a=2166136261,b=0x9e3779b9; const s=String(value); for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);a=Math.imul(a^c,16777619);b=Math.imul(b^c,2246822519);}return (a>>>0).toString(36)+(b>>>0).toString(36); }
   const validDate = n => Number.isFinite(Number(n)) && Number(n) > 0;
@@ -19,6 +19,7 @@
     c.intervalMinutes=Math.max(1,Math.min(60,Number(c.intervalMinutes)||5));
     if(typeof c.tplAr!=='string'||!c.tplAr.trim()||c.tplAr.length>500)c.tplAr=DEFAULTS.tplAr;
     if(typeof c.tplFr!=='string'||!c.tplFr.trim()||c.tplFr.length>500)c.tplFr=DEFAULTS.tplFr;
+    c.storeName=String(c.storeName||'').trim().slice(0,80);
     return c;
   }
   function nextMonthlyDue(ts, day) {
@@ -81,9 +82,12 @@
       const events=[];
       for(const x of items) {
         if(!x.dueAt) continue;
-        const overdueDays=Math.floor((now-x.dueAt)/DAY);
+        const dueDate=new Date(x.dueAt), nowDate=new Date(now);
+        const overdueDays=Math.max(0,Math.floor((Date.UTC(nowDate.getFullYear(),nowDate.getMonth(),nowDate.getDate())-Date.UTC(dueDate.getFullYear(),dueDate.getMonth(),dueDate.getDate()))/DAY));
         let latestPast=-1;
-        for(let i=0;i<cfg.days.length;i++) if(overdueDays>=cfg.days[i]) latestPast=i;
+        // Select by the actual configured local reminder timestamp, not elapsed 24-hour blocks.
+        // A due date stored at 23:59 must still trigger at 14:15 the following calendar day.
+        for(let i=0;i<cfg.days.length;i++) if(localAt(x.dueAt+cfg.days[i]*DAY,cfg.times[i])<=now) latestPast=i;
         for(let i=0;i<cfg.days.length;i++) {
           const reminderAt=localAt(x.dueAt+cfg.days[i]*DAY,cfg.times[i]);
           const key=`${c.id}|${x.debt.id}|${i+1}|${Math.floor(x.dueAt)}`;
@@ -103,7 +107,7 @@
         const amount=es.reduce((a,x)=>a+x.remaining,0);
         const due=Math.min(...es.map(x=>x.dueAt));
         const tpl=lang==='fr'?cfg.tplFr:cfg.tplAr;
-        const message=render(tpl,{title,name:c.name,amount:Math.round(amount).toLocaleString('en-US'),date:dateLabel(due),store:(S.profile&&S.profile.storeName)||''});
+        const message=render(tpl,{title,name:c.name,amount:Math.round(amount).toLocaleString('en-US'),date:dateLabel(due),store:cfg.storeName||(S.profile&&S.profile.storeName)||''});
         pending.push({id:key,key,eventKeys:es.map(x=>x.key),events:es.map(x=>({debtId:x.debtId,step:x.step,dueAt:x.dueAt,key:x.key})),cid:c.id,debtIds,step:es[0].step,phone:phone(c.phone),message,amount,dueAt:due,reminderAt:Math.min(...es.map(x=>x.reminderAt)),overdueDays:Math.max(0,...es.map(x=>Math.max(0,Math.floor((now-x.dueAt)/DAY))))});
       }
     }
