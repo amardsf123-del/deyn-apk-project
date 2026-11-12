@@ -107,7 +107,9 @@
         const amount=es.reduce((a,x)=>a+x.remaining,0);
         const due=Math.min(...es.map(x=>x.dueAt));
         const tpl=lang==='fr'?cfg.tplFr:cfg.tplAr;
-        const message=render(tpl,{title,name:c.name,amount:Math.round(amount).toLocaleString('en-US'),date:dateLabel(due),store:cfg.storeName||(S.profile&&S.profile.storeName)||''});
+        const storeName=cfg.storeName||(S.profile&&S.profile.storeName)||'';
+        let message=render(tpl,{title,name:c.name,amount:Math.round(amount).toLocaleString('en-US'),date:dateLabel(due),store:storeName});
+        if(storeName&&!tpl.includes('{store}')) message+='\\n'+storeName;
         pending.push({id:key,key,eventKeys:es.map(x=>x.key),events:es.map(x=>({debtId:x.debtId,step:x.step,dueAt:x.dueAt,key:x.key})),cid:c.id,debtIds,step:es[0].step,phone:phone(c.phone),message,amount,dueAt:due,reminderAt:Math.min(...es.map(x=>x.reminderAt)),overdueDays:Math.max(0,...es.map(x=>Math.max(0,Math.floor((now-x.dueAt)/DAY))))});
       }
     }
