@@ -18,6 +18,11 @@ for p in (html, prep, engine_file, plugin_file, runtime_file):
 source = html.read_text(encoding='utf-8')
 if 'DEYN_SMS_RUNTIME_V1' in source:
     raise SystemExit('SMS runtime already integrated; refusing duplicate insertion')
+# Show the individual due date and any extensions in the customer's debt ledger.
+due_anchor = '<small class="num">${dateStr(t.ts)} ${timeStr(t.ts)}</small>'
+due_replacement = """<small class="num">${dateStr(t.ts)} ${timeStr(t.ts)}${t.type === 'debt' ? (() => { const dueAt = Number(t.dueAt) || (c.payDay ? window.DeynSmsCore.nextMonthlyDue(t.ts, c.payDay) : null); return dueAt ? ' • الاستحقاق ' + dateStr(dueAt) + (Array.isArray(t.extensionHistory) && t.extensionHistory.length ? ' • تمديد ' + t.extensionHistory.length : '') : ''; })() : ''}</small>"""
+if source.count(due_anchor) != 1: raise SystemExit('Could not locate the unique debt transaction date label')
+source = source.replace(due_anchor, due_replacement, 1)
 # Add the settings entry beside the existing settings controls.
 anchor = '    <div class="row-set">\n      <div>\n        <b>قفل التطبيق بكلمة المرور</b>'
 insert = '''    <div class="row-set" style="background:#f0fdf4;border:1px solid rgba(6,80,67,.15);border-radius:14px;padding:12px;margin:10px 0">
@@ -58,7 +63,7 @@ fi
 ''' + marker, 1)
 prep.write_text(s, encoding='utf-8')
 # Structural assertions ensure no preview bridge was copied into the real application.
-for marker in ('DEYN_SMS_ENGINE_V1','DEYN_SMS_RUNTIME_V1','DeynSmsPlugin.class','SEND_SMS','work-runtime:2.9.0','smsSettings'):
+for marker in ('DEYN_SMS_ENGINE_V1','DEYN_SMS_RUNTIME_V1','DeynSmsPlugin.class','SEND_SMS','work-runtime:2.9.0','smsSettings','الاستحقاق '):
     hay = source + s
     if marker not in hay: raise SystemExit(f'Integration verification failed: {marker}')
 if 'PREVIEW ONLY' in engine or 'mock SMS' in engine: raise SystemExit('Preview bridge detected in SMS engine')

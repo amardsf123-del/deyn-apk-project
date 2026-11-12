@@ -91,7 +91,7 @@ jobs:
           grep -q 'SEND_SMS' android/app/src/main/AndroidManifest.xml
           grep -q 'androidx.work:work-runtime' android/app/build.gradle
           test -s android/app/src/main/java/com/deyn/app/DeynSmsPlugin.java
-      - name: Build unsigned debug APK
+      - name: Build debug APK for testing (debug signing)
         working-directory: source/deyn-app/android
         run: ./gradlew --no-daemon assembleDebug
       - name: Upload APK for owner testing only
