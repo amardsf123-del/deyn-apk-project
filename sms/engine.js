@@ -85,7 +85,7 @@
         for(let i=0;i<cfg.days.length;i++) if(overdueDays>=cfg.days[i]) latestPast=i;
         for(let i=0;i<cfg.days.length;i++) {
           const reminderAt=localAt(x.dueAt+cfg.days[i]*DAY,cfg.times[i]);
-          const key=`${c.id}|${x.debt.id}|${i+1}`;
+          const key=`${c.id}|${x.debt.id}|${i+1}|${Math.floor(x.dueAt)}`;
           if(S.smsLog&&S.smsLog[key]) continue;
           if(reminderAt<=now && i!==latestPast) continue; // one catch-up reminder only; never flood old backlog
           events.push({key,cid:c.id,debtId:x.debt.id,step:i+1,reminderAt,remaining:x.remaining,dueAt:x.dueAt});
@@ -97,7 +97,8 @@
       for(const [group,es] of byStep) {
         const step=es[0].step;
         const debtIds=es.map(x=>x.debtId).sort();
-        const key=`${c.id}|${step}|${debtIds.join(',')}`;
+        const dueSignature=es.map(x=>`${x.debtId}:${Math.floor(x.dueAt)}`).sort().join(',');
+        const key=`${c.id}|${step}|${dueSignature}`;
         if(S.smsLog&&S.smsLog[key]) continue;
         const amount=es.reduce((a,x)=>a+x.remaining,0);
         const due=Math.min(...es.map(x=>x.dueAt));
@@ -129,7 +130,7 @@
     if(c.smsEnabled===false) return {ok:false,reason:'customer-disabled'};
     const to=phone(c.phone); if(!to||to!==item.phone) return {ok:false,reason:'phone-changed'};
     const open=ledger(c).filter(x=>item.debtIds.includes(x.debt.id)); if(!open.length) return {ok:false,reason:'debt-settled'};
-    const due=open.filter(x=>x.dueAt && now>=localAt(x.dueAt+cfg.days[item.step-1]*DAY,cfg.times[item.step-1]) && !(S.smsLog&&S.smsLog[`${c.id}|${x.debt.id}|${item.step}`]));
+    const due=open.filter(x=>x.dueAt && now>=localAt(x.dueAt+cfg.days[item.step-1]*DAY,cfg.times[item.step-1]) && !(S.smsLog&&S.smsLog[`${c.id}|${x.debt.id}|${item.step}|${Math.floor(x.dueAt)}`]));
     if(!due.length) return {ok:false,reason:'not-due'};
     if(S.smsLog&&S.smsLog[item.key]) return {ok:false,reason:'duplicate'};
     const amount=due.reduce((a,x)=>a+x.remaining,0);

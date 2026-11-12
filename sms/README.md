@@ -17,9 +17,9 @@ The app's actual source is stored in `deyn-apk-project.zip`. The GitHub Actions 
 
 ## Platform constraints
 
-WorkManager schedules messages while the app is closed, but Android may defer work because of Doze, battery restrictions, device shutdown or lack of cellular service. SMS requires a working SIM/subscription and carrier credit; internet access is not required. The Android SMS API's successful return is not proof that the recipient received the message.
+WorkManager schedules messages while the app is closed. The native worker rechecks the 09:00–22:00 window and a persistent shop-wide send gap immediately before dispatch, so delayed jobs do not all burst together after Doze or a reboot. Android may still defer work because of battery restrictions, device shutdown or lack of cellular service. SMS requires a working SIM/subscription and carrier credit; internet access is not required. The Android SMS API's successful return is not proof that the recipient received the message. The native ID claim is at-most-once: in the rare crash window after a durable claim but before the API result is stored, a message may be skipped rather than risk a duplicate.
 
-The owner phone is the single sender to prevent two-phone duplicate messages. Offline changes made on the worker phone cannot reach an owner phone that is powered off; the owner receives them only when the local Wi-Fi sync runs again. Therefore no offline two-device design can guarantee knowledge of a payment that has not yet synchronized to the owner device.
+The owner phone is the single sender to prevent two-phone duplicate messages. Each background job also checks that its exact phone/message/time payload is still the active queue snapshot; app edits and successful syncs invalidate stale jobs. Offline changes made on the worker phone cannot reach an owner phone that is powered off; the owner receives them only when the local Wi-Fi sync runs again. Therefore no offline two-device design can guarantee knowledge of a payment that has not yet synchronized to the owner device.
 
 ## Tests
 

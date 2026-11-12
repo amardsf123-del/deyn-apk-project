@@ -33,3 +33,10 @@ const legacy={tx:[{id:'l1',type:'debt',amount:900,ts:1},{id:'l2',type:'pay',amou
 // Monthly legacy due-date derivation uses the customer's existing pay-day, without rewriting old events.
 const monthly={payDay:20,tx:[{id:'m1',type:'debt',amount:100,ts:new Date(2026,10,10).getTime()}]}; assert.ok(C.ledger(monthly)[0].dueAt>monthly.tx[0].ts); assert.equal(monthly.tx[0].dueAt,undefined);
 console.log('SMS integration cases: global/per-customer controls, debt aggregation and legacy non-mutation passed');
+// Extending a debt starts a new reminder cycle for that debt while preserving its old reminder history.
+const extNow=new Date(2026,10,12,12,0,0).getTime();
+const extState={settings:{sms:{enabled:true}},customers:[{id:'ext',name:'Extend',phone:'0555123456',tx:[{id:'ed',type:'debt',amount:400,ts:extNow-40*86400000,dueAt:extNow-30*86400000}]}],smsLog:{}};
+const oldReminder=C.buildQueue(extState,extNow)[0]; extState.smsLog[oldReminder.eventKeys[0]]={status:'accepted_by_android'}; extState.smsLog[oldReminder.key]={status:'accepted_by_android'};
+C.extendDebt(extState.customers[0],'ed',40,'days',extNow);
+const afterExtend=C.buildQueue(extState,extNow); assert.equal(afterExtend.length,4); assert.ok(afterExtend.every(x=>x.id!==oldReminder.id));
+console.log('SMS extension reschedule: a new due-date cycle is not blocked by old reminder keys');
