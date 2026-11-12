@@ -79,7 +79,7 @@
     if(deynReadOnly&&deynReadOnly())return toast('وضع القراءة فقط: لا يمكن إرسال SMS','err');
     const p=plug();if(!p)return toast('الإرسال متاح داخل تطبيق أندرويد فقط','err');
     const to=Core.phone(lastById('smsTestPhone')?.value);if(!to)return toast('أدخل رقم هاتف صحيحًا','err');
-    try{if(!(await smsPermission()))return toast('إذن SMS غير ممنوح','err');const tpl=cfg().tplAr,storeName=cfg().storeName||'';let message=tpl.replace(/\{title\}/g,'').replace(/\{name\}/g,'اختبار').replace(/\{amount\}/g,'1,000').replace(/\{date\}/g,Core.dateLabel(Date.now())).replace(/\{store\}/g,storeName);if(storeName&&!tpl.includes('{store}'))message+='\n'+storeName;const r=await p.send({id:'test-'+Date.now(),phone:to,message});toast(r&&r.sent?'قبل أندرويد إرسال الرسالة التجريبية':'الرسالة التجريبية سبق إرسالها','ok');}catch(e){toast('تعذر إرسال الاختبار: '+(e.message||e),'err');}
+    try{if(!(await smsPermission()))return toast('إذن SMS غير ممنوح','err');const message=Core.testMessage(Core.dateLabel(Date.now()));if(message.length>70)throw new Error('رسالة الاختبار تجاوزت حد الرسالة الواحدة');const r=await p.send({id:'test-'+Date.now(),phone:to,message});toast(r&&r.sent?'قبل أندرويد إرسال اختبار قصير (رسالة واحدة)':'رسالة الاختبار سبق إرسالها','ok');}catch(e){toast('تعذر إرسال الاختبار: '+(e.message||e),'err');}
   }
   function smsHistory(){
     const rows=Object.entries(S.smsLog||{}).filter(([k,v])=>v&&['accepted_by_android','dispatch_uncertain'].includes(v.status)&&!v.internal).sort((a,b)=>(Number((b[1]&&b[1].at)||b[1])||0)-(Number((a[1]&&a[1].at)||a[1])||0)).slice(0,60);
