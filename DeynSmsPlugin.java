@@ -104,9 +104,10 @@ public class DeynSmsPlugin extends Plugin {
 
     @PluginMethod public void getSent(PluginCall call) {
         Set<String> ids = new HashSet<>(prefs(getContext()).getStringSet(SENT, new HashSet<>()));
-        JSArray array = new JSArray(); JSArray items = new JSArray(); SharedPreferences sp = prefs(getContext());
-        for (String id : ids) { array.put(id); JSObject item = new JSObject(); item.put("id", id); item.put("acceptedAt", sp.getLong(SENT_AT_PREFIX + id, 0L)); items.put(item); }
-        JSObject out = new JSObject(); out.put("ids", array); out.put("items", items); call.resolve(out);
+        JSArray array = new JSArray(); JSArray items = new JSArray(); JSArray uncertain = new JSArray(); SharedPreferences sp = prefs(getContext());
+        for (String id : ids) { array.put(id); JSObject item = new JSObject(); item.put("id", id); item.put("acceptedAt", sp.getLong(SENT_AT_PREFIX + id, 0L)); item.put("status", "accepted_by_android"); items.put(item); }
+        for (String id : sp.getStringSet(CLAIMED, new HashSet<>())) { JSObject item = new JSObject(); item.put("id", id); item.put("status", "dispatch_uncertain"); uncertain.put(item); }
+        JSObject out = new JSObject(); out.put("ids", array); out.put("items", items); out.put("uncertain", uncertain); call.resolve(out);
     }
 
 

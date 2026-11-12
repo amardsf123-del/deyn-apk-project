@@ -44,3 +44,6 @@ console.log('SMS extension reschedule: a new due-date cycle is not blocked by ol
 const mixedStep={settings:{sms:{enabled:true}},customers:[{id:'mix',name:'Mix',phone:'0555123456',tx:[{id:'a',type:'debt',amount:100,ts:comboNow-10*86400000,dueAt:comboNow-2*86400000},{id:'b',type:'debt',amount:200,ts:comboNow-12*86400000,dueAt:comboNow-5*86400000}]}],smsLog:{}};
 const mixQueue=C.buildQueue(mixedStep,comboNow).filter(x=>x.at<=comboNow+1000); assert.equal(mixQueue.length,1); assert.equal(mixQueue[0].amount,300); assert.equal(mixQueue[0].events.length,2);
 console.log('SMS aggregation: overdue debts from different reminder stages are combined without suppression');
+
+// An uncertain native dispatch remains suppressed to avoid accidental duplicate texts.
+const uncertainState={settings:{sms:{enabled:true}},customers:[{id:'u',name:'U',phone:'0555123456',tx:[{id:'ud',type:'debt',amount:10,ts:comboNow-10*86400000,dueAt:comboNow-5*86400000}]}],smsLog:{}};const uq=C.buildQueue(uncertainState,comboNow)[0];uncertainState.smsLog[uq.eventKeys[0]]={status:'dispatch_uncertain'};assert.equal(C.buildQueue(uncertainState,comboNow).filter(x=>x.at<=comboNow+1000).length,0);console.log('SMS uncertain dispatch: duplicate suppression remains active');
