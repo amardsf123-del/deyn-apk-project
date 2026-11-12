@@ -66,3 +66,9 @@ console.log('Calendar-time regression: day-1 reminder at 14:15 fires despite due
 const named={settings:{sms:{enabled:true,storeName:'محل الأمانة'}},customers:[{id:'named',name:'Test',phone:'0555123456',tx:[{id:'nd',type:'debt',amount:30,ts:exactDue-3*86400000,dueAt:exactDue}]}],smsLog:{}};
 assert.match(C.buildQueue(named,exactNow)[0].message,/محل الأمانة/);
 console.log('Store name regression: configured merchant name is inserted into reminder template');
+
+// The default Arabic reminder and dedicated test stay within one Unicode SMS segment for typical values.
+assert.ok(C.DEFAULTS.tplAr.length < 70, 'compact default Arabic template should fit a single Unicode segment before variable expansion');
+assert.ok(C.testMessage('12/11/2026').length <= 70, 'Arabic test SMS must fit one Unicode segment');
+assert.match(C.testMessage('12/11/2026'), /اختبار SMS ناجح/);
+console.log('SMS delivery regression: short default template and single-part test message passed');
