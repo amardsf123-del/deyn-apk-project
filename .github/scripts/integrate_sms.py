@@ -46,7 +46,7 @@ if style_marker not in source:
 .code-card__body,.code-card__value{min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word}
 #modalRoot,.ovl,.sheet{min-width:0;max-width:100%}
 </style>'''
-    source = source.replace('</head>', style + '\\n</head>', 1)
+    source = source.replace('</head>', style + '\n</head>', 1)
 # Four narrow columns made Android time controls clip; two flexible columns keep every day and time visible.
 source = source.replace('grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px', 'grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px')
 source = source.replace('grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px', 'grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px')
