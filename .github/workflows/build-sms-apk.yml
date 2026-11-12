@@ -1,0 +1,61 @@
+name: DEYN SMS manual Android build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Extract and integrate real app source
+        run: |
+          set -euo pipefail
+          test -s deyn-apk-project.zip
+          mkdir source
+          unzip -q deyn-apk-project.zip -d source
+          python3 .github/scripts/integrate_sms.py source sms/engine.js DeynSmsPlugin.java
+          node sms/test.mjs
+      - name: Verify JavaScript
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess, tempfile
+          html = Path('source/deyn-app/www/index.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script\s*>', html, re.I)
+          for i, script in enumerate(scripts):
+              if script.strip():
+                  p = Path(tempfile.gettempdir()) / f'deyn-{i}.js'
+                  p.write_text(script, encoding='utf-8')
+                  subprocess.run(['node', '--check', str(p)], check=True)
+          PY
+      - name: Build debug APK
+        working-directory: source/deyn-app
+        run: |
+          npm install
+          python3 scripts/fetch_fonts.py
+          npx cap add android
+          bash scripts/prepare-android.sh
+          npx cap sync android
+          cd android
+          ./gradlew --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deyn-sms-manual-debug-apk
+          path: source/deyn-app/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14

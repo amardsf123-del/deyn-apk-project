@@ -2,10 +2,12 @@ name: Inspect DEYN source archive
 
 on:
   push:
-    branches: [main]
+    branches: [main, sms-integration-files]
     paths:
       - '.github/workflows/inspect-deyn.yml'
       - 'deyn-apk-project.zip'
+      - 'sms-feature.zip'
+      - 'sms-feature.patch'
   workflow_dispatch:
 
 permissions:
@@ -17,35 +19,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extract and inventory project
+      - name: Extract project and SMS package
         shell: bash
         run: |
           set -euo pipefail
           test -s deyn-apk-project.zip
-          mkdir -p source
+          test -s sms-feature.zip
+          mkdir -p source sms-feature
           unzip -q deyn-apk-project.zip -d source
+          unzip -q sms-feature.zip -d sms-feature
           {
-            echo "ARCHIVE CONTENTS"
-            find source -maxdepth 5 -type f | sort
+            echo "PROJECT ARCHIVE CONTENTS"
+            find source -maxdepth 6 -type f | sort
+            echo
+            echo "SMS PACKAGE CONTENTS"
+            find sms-feature -maxdepth 6 -type f | sort
             echo
             echo "PACKAGE FILES"
-            find source -name package.json -type f -print
+            find source sms-feature -name package.json -type f -print
             echo
             echo "ANDROID / BUILD FILES"
-            find source \( -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'AndroidManifest.xml' -o -name 'capacitor.config.*' \) -type f -print
+            find source sms-feature \( -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'AndroidManifest.xml' -o -name 'capacitor.config.*' -o -name 'MainActivity.java' \) -type f -print
             echo
-            echo "ACTIVATION / SECURITY MATCHES"
-            grep -RniE 'DEYN_SECRET|FACTORY_PASS|donomar47|HMAC|Ed25519|privateKey|publicKey|SecureStorage|localStorage|expiry|expiresAt|trusted.?time|device.?id|recovery' source --exclude-dir=node_modules --exclude='*.lock' || true
+            echo "SMS INTEGRATION MARKERS"
+            grep -RniE 'smsRemind|SMS_DEFAULT_TPL|smsSyncSchedule|smsConsentOk|smsTest|smsTpl|DeynSmsPlugin' source sms-feature --exclude-dir=node_modules --exclude='*.lock' || true
           } > inspection.txt
           cat inspection.txt
+      - name: Block accidental secret exposure
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find source sms-feature -type f \( -name '*.pem' -o -name '*.key' -o -name '.env' -o -name '.env.*' \) | grep -q .; then
+            echo "Blocked: sensitive key or environment file found in extracted archive."
+            exit 1
+          fi
+          if grep -RIlE --binary-files=without-match '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{30,}|AIza[0-9A-Za-z_-]{30,}' source sms-feature; then
+            echo "Blocked: possible secret detected. No artifact uploaded."
+            exit 1
+          fi
       - name: Upload extracted source for review
         uses: actions/upload-artifact@v4
         with:
           name: deyn-source-inspection
           path: |
             source/
+            sms-feature/
+            sms-feature.patch
+            DeynSmsPlugin.java
             inspection.txt
           if-no-files-found: error
           retention-days: 3
 
-# Inspection workflow is intentionally separate from APK builds.
+# Inspection only. No source files are changed and no APK is built.
