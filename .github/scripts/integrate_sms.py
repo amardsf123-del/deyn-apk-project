@@ -38,7 +38,8 @@ engine = engine_file.read_text(encoding='utf-8')
 runtime = runtime_file.read_text(encoding='utf-8')
 i18n = i18n_file.read_text(encoding='utf-8')
 script = '\n<script>\n/* DEYN_SMS_ENGINE_V1 */\n' + engine + '\n' + runtime + '\n</script>\n'
-# Load localization after the app markup/scripts so the observer also translates dynamic screens.\ni18n_script = '\n<script>\n/* DEYN_I18N_RUNTIME_V1 */\n' + i18n + '\n</script>\n'
+# Load localization after the app markup/scripts so the observer also translates dynamic screens.
+i18n_script = '\n<script>\n/* DEYN_I18N_RUNTIME_V1 */\n' + i18n + '\n</script>\n'
 # Stabilize bottom sheets on small Android viewports and prevent long code cards/time inputs from widening the page.
 style_marker = '<style id="deyn-sms-layout-fix-v2">'
 if style_marker not in source:
