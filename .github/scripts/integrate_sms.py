@@ -72,7 +72,7 @@ if 'data-i18n-setting="language"' not in source:
 # Four narrow columns made Android time controls clip; two flexible columns keep every day and time visible.
 source = source.replace('grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px', 'grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px')
 source = source.replace('grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px', 'grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px')
-if '</body>' not in source: raise SystemExit('Missing closing body tag')
+i18n_script = '\n<script>\n/* DEYN_I18N_RUNTIME_V1 */\n' + i18n + '\n</script>\n'\nif '</body>' not in source: raise SystemExit('Missing closing body tag')
 idx = source.rfind('</body>')
 source = source[:idx] + script + i18n_script + source[idx:]
 html.write_text(source, encoding='utf-8')
