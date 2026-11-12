@@ -56,3 +56,13 @@ const bulk={settings:{sms:{enabled:true}},customers:[{id:'bulk',name:'Bulk',phon
 
 // Explicit per-customer opt-out remains effective independently of the global switch.
 const opted={settings:{sms:{enabled:true}},customers:[{id:'opt',name:'Opt',phone:'0555123456',smsEnabled:true,smsOptOut:true,tx:[{id:'od',type:'debt',amount:100,ts:comboNow-10*86400000,dueAt:comboNow-5*86400000}]}],smsLog:{}};assert.equal(C.buildQueue(opted,comboNow).length,0);console.log('SMS opt-out: explicit customer opt-out overrides an enabled global setting');
+
+// A debt due at the end of yesterday must trigger at the configured time today (not wait 24 elapsed hours).
+const exactDue=new Date(2026,10,11,23,59,59,999).getTime();
+const exactNow=new Date(2026,10,12,14,15,0).getTime();
+const exactState={settings:{sms:{enabled:true,days:[1,4,8,15],times:['14:15','11:00','16:00','10:00']}},customers:[{id:'exact',name:'Exact',phone:'0555123456',tx:[{id:'exact-debt',type:'debt',amount:75,ts:exactDue-3*86400000,dueAt:exactDue}]}],smsLog:{}};
+const exactQueue=C.buildQueue(exactState,exactNow);assert.equal(exactQueue.length,1);assert.equal(exactQueue[0].step,1);assert.equal(exactQueue[0].at,exactNow);assert.equal(C.validateBeforeSend(exactState,exactQueue[0],exactNow).ok,true);
+console.log('Calendar-time regression: day-1 reminder at 14:15 fires despite dueAt being stored at 23:59');
+const named={settings:{sms:{enabled:true,storeName:'محل الأمانة'}},customers:[{id:'named',name:'Test',phone:'0555123456',tx:[{id:'nd',type:'debt',amount:30,ts:exactDue-3*86400000,dueAt:exactDue}]}],smsLog:{}};
+assert.match(C.buildQueue(named,exactNow)[0].message,/محل الأمانة/);
+console.log('Store name regression: configured merchant name is inserted into reminder template');
