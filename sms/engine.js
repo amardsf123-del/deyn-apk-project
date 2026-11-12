@@ -74,7 +74,7 @@
     if(!cfg.enabled || !Array.isArray(S.customers)) return [];
     const pending=[];
     for(const c of S.customers) {
-      if(c.smsEnabled===false || !phone(c.phone)) continue;
+      if(c.smsEnabled===false || c.smsOptOut===true || !phone(c.phone)) continue;
       const lang=c.smsLang==='fr'?'fr':'ar';
       const title=c.honorific==='madame'?(lang==='fr'?'Madame':'السيدة'):c.honorific==='monsieur'?(lang==='fr'?'Monsieur':'السيد'):'';
       const items=ledger(c);
@@ -127,7 +127,7 @@
     const cfg=config(S.settings&&S.settings.sms||S.settings&&S.settings.smsConfig);
     if(!cfg.enabled) return {ok:false,reason:'global-disabled'};
     const c=(S.customers||[]).find(x=>x.id===item.cid); if(!c) return {ok:false,reason:'customer-missing'};
-    if(c.smsEnabled===false) return {ok:false,reason:'customer-disabled'};
+    if(c.smsEnabled===false||c.smsOptOut===true) return {ok:false,reason:'customer-disabled'};
     const to=phone(c.phone); if(!to||to!==item.phone) return {ok:false,reason:'phone-changed'};
     const open=ledger(c).filter(x=>item.debtIds.includes(x.debt.id)); if(!open.length) return {ok:false,reason:'debt-settled'};
     const byId=new Map(open.map(x=>[x.debt.id,x]));

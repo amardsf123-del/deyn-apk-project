@@ -51,7 +51,7 @@
       if(!ok){el.checked=false;toast('لم يتم منح إذن إرسال الرسائل، بقيت الميزة متوقفة','err');return;}
       cfg().enabled=true;
       // The agreed global re-enable behavior: enable every customer with a valid phone.
-      (S.customers||[]).forEach(c=>{if(Core.phone(c.phone))c.smsEnabled=true;});
+      (S.customers||[]).forEach(c=>{if(Core.phone(c.phone)){c.smsEnabled=true;c.smsOptOut=false;}});
       toast('تم تفعيل SMS للزبائن الذين لديهم أرقام هاتف');
     }else{cfg().enabled=false;toast('تم إيقاف جميع رسائل SMS مؤقتًا');}
     persist();smsScheduleSoon();
@@ -79,7 +79,7 @@
     const rows=Object.entries(S.smsLog||{}).filter(([k,v])=>v&&['accepted_by_android','dispatch_uncertain'].includes(v.status)&&!v.internal).sort((a,b)=>(Number((b[1]&&b[1].at)||b[1])||0)-(Number((a[1]&&a[1].at)||a[1])||0)).slice(0,60);
     openModal(()=>`${sheetHead('سجل رسائل SMS')}<div class="sub">يعرض السجل قبول أندرويد أو حالة إرسال غير مؤكدة؛ ولا يثبت وصول الرسالة إلى هاتف الزبون.</div>${rows.length?rows.map(([k,v])=>`<div class="tx"><div class="tx-ic ${v&&v.status==='dispatch_uncertain'?'debt':'pay'}">${v&&v.status==='dispatch_uncertain'?'!':'✓'}</div><div class="tx-m"><b>${escSms(v&&v.customerName||k)}</b><small>${escSms(v&&v.status==='accepted_by_android'?'قبل أندرويد الإرسال':'حالة الإرسال غير مؤكدة — لم نعد المحاولة لتجنب التكرار')} • ${escSms(fmtDate(Number(v&&v.at)||Number(v)||0))}</small></div><div class="tx-a"><small>${escSms(v&&v.phone||'')}</small></div></div>`).join(''):'<div class="empty-st" style="padding:22px">لا توجد رسائل في السجل بعد</div>'}`);
   }
-  function smsScheduleSoon(){clearTimeout(syncTimer);syncTimer=setTimeout(smsSchedule,350);}
+  function smsScheduleSoon(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>{if(syncBusy){smsScheduleSoon();return;}smsSchedule();},100);}
   async function smsSchedule(){
     const p=plug();if(!p||syncBusy||!S)return;
     syncBusy=true;
@@ -95,6 +95,7 @@
       for(const id of Object.keys(S.smsQueueMeta))if(!active.has(id))delete S.smsQueueMeta[id];
       for(const item of queue){S.smsQueueMeta[item.id]={eventKeys:item.eventKeys,customerName:((S.customers||[]).find(c=>c.id===item.cid)||{}).name||'',phone:item.phone};}
       let durable=true;if(changed||queue.length){try{const saved=originalPersist();if(saved===false)durable=false;else if(typeof deynFlush==='function')await deynFlush();}catch(e){durable=false;console.warn('SMS state flush failed',e);}}
+      if(!durable){await p.schedule({items:[]});return;}
       const items=queue.filter(x=>!S.smsLog[x.id]&&(x.at>now||Core.validateBeforeSend(S,x,now).ok)).map(x=>({id:x.id,phone:x.phone,message:x.message,at:x.at,gapMinutes:x.gapMinutes}));
       await p.schedule({items});
     }catch(e){console.warn('SMS queue update failed',e);}
@@ -107,17 +108,17 @@
   }
   // Extend the existing customer form with owner-only contact preferences.
   const originalOpenCustForm=openCustForm;
-  openCustForm=function(id,seg){originalOpenCustForm(id,seg);if(isWorkerDevice())return;const c=id?cust(id):null;const sheet=document.querySelector('#modalRoot .ovl:last-child .sheet');if(!sheet||sheet.querySelector('#fSmsLang'))return;const anchor=sheet.querySelector('#fPhone');const block=document.createElement('div');block.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><label class="lbl">اللقب<select class="inp" id="fHonorific"><option value="" ${!c?.honorific?'selected':''}>بدون لقب</option><option value="monsieur" ${c?.honorific==='monsieur'?'selected':''}>السيد / Monsieur</option><option value="madame" ${c?.honorific==='madame'?'selected':''}>السيدة / Madame</option></select></label><label class="lbl">لغة الرسالة<select class="inp" id="fSmsLang"><option value="auto" ${!c?.smsLang||c?.smsLang==='auto'?'selected':''}>تلقائي (عربي)</option><option value="ar" ${c?.smsLang==='ar'?'selected':''}>العربية</option><option value="fr" ${c?.smsLang==='fr'?'selected':''}>Français</option></select></label></div><label style="display:flex;align-items:center;gap:8px;font-size:12px;margin:8px 0"><input id="fSmsEnabled" type="checkbox" style="width:18px;height:18px" ${(c?c.smsEnabled!==false:!!(lastById('fPhone')?.value))?'checked':''}> السماح بإرسال تذكيرات SMS لهذا الزبون</label>`;anchor?.after(block);};
+  openCustForm=function(id,seg){originalOpenCustForm(id,seg);if(isWorkerDevice())return;const c=id?cust(id):null;const sheet=document.querySelector('#modalRoot .ovl:last-child .sheet');if(!sheet||sheet.querySelector('#fSmsLang'))return;const anchor=sheet.querySelector('#fPhone');const block=document.createElement('div');block.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><label class="lbl">اللقب<select class="inp" id="fHonorific"><option value="" ${!c?.honorific?'selected':''}>بدون لقب</option><option value="monsieur" ${c?.honorific==='monsieur'?'selected':''}>السيد / Monsieur</option><option value="madame" ${c?.honorific==='madame'?'selected':''}>السيدة / Madame</option></select></label><label class="lbl">لغة الرسالة<select class="inp" id="fSmsLang"><option value="auto" ${!c?.smsLang||c?.smsLang==='auto'?'selected':''}>تلقائي (عربي)</option><option value="ar" ${c?.smsLang==='ar'?'selected':''}>العربية</option><option value="fr" ${c?.smsLang==='fr'?'selected':''}>Français</option></select></label></div><label style="display:flex;align-items:center;gap:8px;font-size:12px;margin:8px 0"><input id="fSmsEnabled" type="checkbox" style="width:18px;height:18px" ${(!c||(!c.smsOptOut&&c.smsEnabled!==false))?'checked':''} ${c?.smsOptOut?'data-user-touched="1"':''}> السماح بإرسال تذكيرات SMS لهذا الزبون</label>`;anchor?.after(block);};
   const originalSaveCust=saveCust;
   saveCust=function(){
     if(isWorkerDevice())return originalSaveCust();
     const editId=CF&&CF.id?CF.id:null, beforeCount=(S.customers||[]).length;
     const phoneVal=lastById('fPhone')?.value.trim()||'';
-    const honorific=lastById('fHonorific')?.value||'';const smsLang=lastById('fSmsLang')?.value||'auto';const smsEnabled=!!lastById('fSmsEnabled')?.checked&&!!Core.phone(phoneVal);
+    const honorific=lastById('fHonorific')?.value||'';const smsLang=lastById('fSmsLang')?.value||'auto';const hasPhone=!!Core.phone(phoneVal);const smsChecked=!!lastById('fSmsEnabled')?.checked;const smsOptOut=hasPhone?!smsChecked:!!(cust(editId||'')||{}).smsOptOut;const smsEnabled=hasPhone&&!smsOptOut;
     const activeModal=stack[stack.length-1];originalSaveCust();
     if(activeModal&&stack.includes(activeModal))return;
     const updated=editId?cust(editId):((S.customers||[]).length>beforeCount?S.customers[S.customers.length-1]:null);
-    if(updated){updated.honorific=honorific;updated.smsLang=smsLang;updated.smsEnabled=smsEnabled;persist();smsScheduleSoon();}
+    if(updated){updated.honorific=honorific;updated.smsLang=smsLang;updated.smsEnabled=smsEnabled;updated.smsOptOut=smsOptOut;persist();smsScheduleSoon();}
   };
   const originalOpenMoney=openMoney;
   openMoney=function(cid,kind){
@@ -159,7 +160,7 @@
   A.smsSettings=guard(smsOpenSettings);A.smsSaveSettings=guard(smsSaveSettings);A.smsTest=guard(smsTest);A.smsHistory=smsHistory;A.saveCust=guard(saveCust);A.mmok=guard(confirmMoney);
   document.addEventListener('change',e=>{if(e.target&&e.target.id==='smsGlobal')smsToggleGlobal(e.target);});
   document.addEventListener('change',e=>{if(e.target&&e.target.id==='fSmsEnabled')e.target.dataset.userTouched='1';});
-  document.addEventListener('input',e=>{if(e.target&&e.target.id==='fPhone'&&cfg().enabled){const cb=lastById('fSmsEnabled');if(cb&&!cb.dataset.userTouched&&Core.phone(e.target.value))cb.checked=true;}});
+  document.addEventListener('input',e=>{if(e.target&&e.target.id==='fPhone'&&cfg().enabled){const cb=lastById('fSmsEnabled');const c=CF&&CF.id?cust(CF.id):null;if(cb&&!cb.dataset.userTouched&&!c?.smsOptOut&&Core.phone(e.target.value))cb.checked=true;}});
 
   document.addEventListener('DOMContentLoaded',smsScheduleSoon);
   window.addEventListener('pageshow',smsScheduleSoon);

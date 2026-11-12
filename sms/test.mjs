@@ -53,3 +53,6 @@ const safe=C.config({days:[],times:[],start:'00:00',end:'23:59',intervalMinutes:
 
 // Group IDs stay compact even when one customer has a large number of debt events.
 const bulk={settings:{sms:{enabled:true}},customers:[{id:'bulk',name:'Bulk',phone:'0555123456',tx:Array.from({length:250},(_,i)=>({id:'debt-'+i,type:'debt',amount:1,ts:comboNow-20*86400000,dueAt:comboNow-10*86400000}))}],smsLog:{}};const bulkQ=C.buildQueue(bulk,comboNow);assert.ok(bulkQ.every(x=>x.id.length<100));console.log('SMS queue IDs: large grouped reminders keep compact idempotency keys');
+
+// Explicit per-customer opt-out remains effective independently of the global switch.
+const opted={settings:{sms:{enabled:true}},customers:[{id:'opt',name:'Opt',phone:'0555123456',smsEnabled:true,smsOptOut:true,tx:[{id:'od',type:'debt',amount:100,ts:comboNow-10*86400000,dueAt:comboNow-5*86400000}]}],smsLog:{}};assert.equal(C.buildQueue(opted,comboNow).length,0);console.log('SMS opt-out: explicit customer opt-out overrides an enabled global setting');
