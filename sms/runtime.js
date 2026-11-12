@@ -30,6 +30,12 @@
         <div class="sub">الافتراضي 09:00–22:00. تُرتّب الرسائل حسب أقدم دين متأخر وتُرسل بالتتابع لتجنب الإرسال الجماعي.</div>
       </div>
       <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:12px">
+        <b style="font-size:13px">اسم المحل في الرسالة</b>
+        <label class="lbl">اسم المحل أو التاجر الذي يظهر للزبون</label>
+        <input class="inp" id="smsStoreName" type="text" maxlength="80" value="${escSms(c.storeName||'')}" placeholder="مثال: محل الأمانة">
+        <div class="sub">يُضاف هذا الاسم تلقائيًا مكان {store} في القالب العربي والفرنسي.</div>
+      </div>
+      <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:12px">
         <b style="font-size:13px">قوالب الرسائل القابلة للتعديل</b>
         <label class="lbl">القالب العربي</label><textarea class="inp" id="smsTplAr" maxlength="500" rows="4" style="height:auto;line-height:1.8">${escSms(c.tplAr)}</textarea>
         <label class="lbl">القالب الفرنسي</label><textarea class="inp" id="smsTplFr" maxlength="500" rows="4" style="height:auto;line-height:1.8;direction:ltr;text-align:left">${escSms(c.tplFr)}</textarea>
@@ -66,14 +72,14 @@
     const gap=Number(lastById('smsGap')?.value||5);
     if(days.some(x=>!Number.isInteger(x)||x<1||x>90)||new Set(days).size!==4||days.some((x,i)=>i>0&&x<=days[i-1])||times.some(x=>!/^([01]\d|2[0-3]):[0-5]\d$/.test(x))||!/^09:00$/.test(start)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(end)||end>'22:00'||end<='09:00'||!Number.isInteger(gap)||gap<1||gap>60)return toast('تحقق من الأيام والساعات والفاصل الزمني','err');
     c.days=days;c.times=times;c.start=start;c.end=end;c.intervalMinutes=gap;
-    c.tplAr=lastById('smsTplAr')?.value.trim()||Core.DEFAULTS.tplAr;c.tplFr=lastById('smsTplFr')?.value.trim()||Core.DEFAULTS.tplFr;if(c.tplAr.length>500||c.tplFr.length>500)return toast('القالب طويل جدًا — الحد الأقصى 500 حرف لكل لغة','err');
+    c.storeName=(lastById('smsStoreName')?.value||'').trim().slice(0,80);c.tplAr=lastById('smsTplAr')?.value.trim()||Core.DEFAULTS.tplAr;c.tplFr=lastById('smsTplFr')?.value.trim()||Core.DEFAULTS.tplFr;if(c.tplAr.length>500||c.tplFr.length>500)return toast('القالب طويل جدًا — الحد الأقصى 500 حرف لكل لغة','err');
     persist();smsScheduleSoon();closeModal();toast('تم حفظ إعدادات SMS بنجاح');
   }
   async function smsTest(){
     if(deynReadOnly&&deynReadOnly())return toast('وضع القراءة فقط: لا يمكن إرسال SMS','err');
     const p=plug();if(!p)return toast('الإرسال متاح داخل تطبيق أندرويد فقط','err');
     const to=Core.phone(lastById('smsTestPhone')?.value);if(!to)return toast('أدخل رقم هاتف صحيحًا','err');
-    try{if(!(await smsPermission()))return toast('إذن SMS غير ممنوح','err');const tpl=cfg().tplAr;const message=tpl.replace(/\{title\}/g,'').replace(/\{name\}/g,'اختبار').replace(/\{amount\}/g,'1,000').replace(/\{date\}/g,Core.dateLabel(Date.now())).replace(/\{store\}/g,'');const r=await p.send({id:'test-'+Date.now(),phone:to,message});toast(r&&r.sent?'قبل أندرويد إرسال الرسالة التجريبية':'الرسالة التجريبية سبق إرسالها','ok');}catch(e){toast('تعذر إرسال الاختبار: '+(e.message||e),'err');}
+    try{if(!(await smsPermission()))return toast('إذن SMS غير ممنوح','err');const tpl=cfg().tplAr;const message=tpl.replace(/\{title\}/g,'').replace(/\{name\}/g,'اختبار').replace(/\{amount\}/g,'1,000').replace(/\{date\}/g,Core.dateLabel(Date.now())).replace(/\{store\}/g,escSms(cfg().storeName||''));const r=await p.send({id:'test-'+Date.now(),phone:to,message});toast(r&&r.sent?'قبل أندرويد إرسال الرسالة التجريبية':'الرسالة التجريبية سبق إرسالها','ok');}catch(e){toast('تعذر إرسال الاختبار: '+(e.message||e),'err');}
   }
   function smsHistory(){
     const rows=Object.entries(S.smsLog||{}).filter(([k,v])=>v&&['accepted_by_android','dispatch_uncertain'].includes(v.status)&&!v.internal).sort((a,b)=>(Number((b[1]&&b[1].at)||b[1])||0)-(Number((a[1]&&a[1].at)||a[1])||0)).slice(0,60);
