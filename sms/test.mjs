@@ -72,3 +72,13 @@ assert.ok(C.DEFAULTS.tplAr.length < 70, 'compact default Arabic template should 
 assert.ok(C.testMessage('12/11/2026').length <= 70, 'Arabic test SMS must fit one Unicode segment');
 assert.match(C.testMessage('12/11/2026'), /اختبار SMS ناجح/);
 console.log('SMS delivery regression: short default template and single-part test message passed');
+
+const oldDefaultAr='السلام عليكم {title} {name}، نذكّركم بأن عليكم مبلغ {amount} دج مستحق منذ {date}. نرجو التسوية عند الإمكان. شكرًا لكم 😊';
+const oldDefaultFr='Bonjour {title} {name}, nous vous rappelons que votre solde de {amount} DA est dû depuis le {date}. Merci de régulariser dès que possible 😊';
+const migrated=C.config({tplAr:oldDefaultAr,tplFr:oldDefaultFr});
+assert.equal(migrated.tplAr,C.DEFAULTS.tplAr,'existing installs migrate the shipped Arabic default to the compact template');
+assert.equal(migrated.tplFr,C.DEFAULTS.tplFr,'existing installs migrate the shipped French default to the compact template');
+assert.equal(C.config({tplAr:'قالب مخصص'}).tplAr,'قالب مخصص','owner custom templates must not be overwritten');
+const sampleReminder=C.DEFAULTS.tplAr.replace('{title}','السيد').replace('{name}','علي').replace('{amount}','1,000').replace('{date}','12/11/2026');
+assert.ok(sampleReminder.length<=70,'typical Arabic reminder must fit one Unicode SMS segment');
+console.log('SMS template migration: old defaults upgraded, custom templates preserved, typical reminder is one part');

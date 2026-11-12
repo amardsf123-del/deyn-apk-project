@@ -100,7 +100,7 @@ fi
 ''' + marker, 1)
 prep.write_text(s, encoding='utf-8')
 # Structural assertions ensure no preview bridge was copied into the real application.
-for marker in ('DEYN_SMS_ENGINE_V1','DEYN_SMS_RUNTIME_V1','DEYN_I18N_RUNTIME_V1','DEYN_FR_DICT','DEYN_I18N.start','id="agLang"','data-i18n-setting="language"','DeynSmsPlugin.class','SEND_SMS','work-runtime:2.9.0','smsSettings','الاستحقاق '):
+for marker in ('DEYN_SMS_ENGINE_V1','DEYN_SMS_RUNTIME_V1','DEYN_I18N_RUNTIME_V1','DEYN_FR_DICT','DEYN_I18N.start','id="agLang"','data-i18n-setting="language"','DeynSmsPlugin.class','SEND_SMS','work-runtime:2.9.0','smsSettings','الاستحقاق ','body.fr .dial'):
     hay = source + s
     if marker not in hay: raise SystemExit(f'Integration verification failed: {marker}')
 if 'PREVIEW ONLY' in engine or 'mock SMS' in engine: raise SystemExit('Preview bridge detected in SMS engine')

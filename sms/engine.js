@@ -10,6 +10,11 @@
   const parseTime = s => { const m=/^(\d{2}):(\d{2})$/.exec(String(s||'')); return m && +m[1]<24 && +m[2]<60 ? [+m[1],+m[2]] : null; };
   function config(raw) {
     const c=Object.assign({},DEFAULTS,raw||{});
+    // Migrate only the exact shipped defaults from the previous release; preserve owner-edited templates.
+    const OLD_DEFAULT_AR='السلام عليكم {title} {name}، نذكّركم بأن عليكم مبلغ {amount} دج مستحق منذ {date}. نرجو التسوية عند الإمكان. شكرًا لكم 😊';
+    const OLD_DEFAULT_FR='Bonjour {title} {name}, nous vous rappelons que votre solde de {amount} DA est dû depuis le {date}. Merci de régulariser dès que possible 😊';
+    if(c.tplAr===OLD_DEFAULT_AR)c.tplAr=DEFAULTS.tplAr;
+    if(c.tplFr===OLD_DEFAULT_FR)c.tplFr=DEFAULTS.tplFr;
     const days=Array.isArray(c.days)&&c.days.length===4?c.days.map(Number):[];
     c.days=days.length===4&&days.every((x,i)=>Number.isInteger(x)&&x>=1&&x<=90&&(i===0||x>days[i-1]))?days:DEFAULTS.days.slice();
     const times=Array.isArray(c.times)&&c.times.length===4?c.times.slice():[];
