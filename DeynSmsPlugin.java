@@ -82,8 +82,11 @@ public class DeynSmsPlugin extends Plugin {
             synchronized (LOCK) {
                 if (!prefs(context).edit().putStringSet(ACTIVE, active).putStringSet(ACTIVE_PAYLOADS, activePayloads).commit()) throw new IllegalStateException("Could not persist active queue");
             }
+            // Do not cancel every tagged job here: WorkManager cancellation is asynchronous,
+            // so a just-enqueued replacement can be cancelled by the outstanding tag operation.
+            // The persisted ACTIVE ids/payloads invalidate obsolete workers safely; unique work
+            // with REPLACE updates each still-active reminder without the global cancellation race.
             WorkManager wm = WorkManager.getInstance(context);
-            wm.cancelAllWorkByTag(TAG);
             long now = System.currentTimeMillis(); int queued = 0;
             for (int i = 0; i < items.length(); i++) {
                 JSONObject item = items.getJSONObject(i);
@@ -98,7 +101,7 @@ public class DeynSmsPlugin extends Plugin {
                     .setInitialDelay(delay, TimeUnit.MILLISECONDS).setInputData(data).addTag(TAG).build();
                 wm.enqueueUniqueWork("deyn_sms_" + id, ExistingWorkPolicy.REPLACE, request); queued++;
             }
-            JSObject out = new JSObject(); out.put("count", queued); out.put("cancelledAndReplaced", true); call.resolve(out);
+            JSObject out = new JSObject(); out.put("count", queued); out.put("replacedActiveItems", true); call.resolve(out);
         } catch (Exception e) { call.reject("SMS scheduling failed: " + e.getClass().getSimpleName()); }
     }
 
