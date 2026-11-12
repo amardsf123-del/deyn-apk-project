@@ -1,5 +1,4 @@
-name: DEYN SMS integration - debug test only
-# Re-run after Capacitor permission-state import fix
+name: DEYN SMS professional integration and Android test build
 
 on:
   push:
@@ -7,15 +6,7 @@ on:
     paths:
       - '.github/workflows/build-sms-test.yml'
       - '.github/scripts/integrate_sms.py'
-      - 'sms-feature.patch'
-      - 'DeynSmsPlugin.java'
-      - 'deyn-apk-project.zip'
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/workflows/build-sms-test.yml'
-      - '.github/scripts/integrate_sms.py'
-      - 'sms-feature.patch'
+      - 'sms/**'
       - 'DeynSmsPlugin.java'
       - 'deyn-apk-project.zip'
   workflow_dispatch:
@@ -23,10 +14,14 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build-debug:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,56 +34,52 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Extract the real project archive
-        shell: bash
+      - name: Extract the real DEYN project archive
         run: |
           set -euo pipefail
           test -s deyn-apk-project.zip
-          test -s sms-feature.patch
+          test -s sms/engine.js
+          test -s sms/runtime.js
           test -s DeynSmsPlugin.java
           mkdir source
           unzip -q deyn-apk-project.zip -d source
-      - name: Integrate SMS into real Capacitor source (never preview)
-        run: python3 .github/scripts/integrate_sms.py source sms-feature.patch DeynSmsPlugin.java
-      - name: Verify HTML JavaScript syntax
-        shell: bash
+          test -s source/deyn-app/www/index.html
+      - name: Integrate the SMS feature into the real app source
+        run: python3 .github/scripts/integrate_sms.py source sms/engine.js DeynSmsPlugin.java
+      - name: Verify every integrated JavaScript block
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re, subprocess, tempfile
           html = Path('source/deyn-app/www/index.html').read_text(encoding='utf-8')
           scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script\s*>', html, re.I)
-          if not scripts:
-              raise SystemExit('No inline scripts found')
+          if len(scripts) < 2 or 'DEYN_SMS_ENGINE_V1' not in html or 'DEYN_SMS_RUNTIME_V1' not in html:
+              raise SystemExit('SMS engine/runtime was not integrated into the actual app HTML')
           for i, script in enumerate(scripts):
-              if not script.strip():
-                  continue
-              p = Path(tempfile.gettempdir()) / f'deyn-inline-{i}.js'
-              p.write_text(script, encoding='utf-8')
-              subprocess.run(['node', '--check', str(p)], check=True)
+              if script.strip():
+                  p = Path(tempfile.gettempdir()) / f'deyn-inline-{i}.js'
+                  p.write_text(script, encoding='utf-8')
+                  subprocess.run(['node', '--check', str(p)], check=True)
           print(f'Checked {len(scripts)} inline script blocks')
           PY
-      - name: Install Chromium for browser security tests
+      - name: Run SMS engine unit and edge-case tests
+        run: node sms/test.mjs
+      - name: Install Chromium for DEYN browser security tests
         run: |
-          python3 -m pip install playwright
+          python3 -m pip install --disable-pip-version-check playwright opencv-python-headless numpy
           python3 -m playwright install --with-deps chromium
-      - name: Run DEYN unit and security tests
-        shell: bash
+      - name: Run existing DEYN security, storage, time and sync suites
+        working-directory: source
         run: |
           set -euo pipefail
-          cd source
           node trusted-time/test.mjs
           node sync/test_engine.mjs
           node sync/test_session.mjs
-          # These legacy test files execute their own runner and call sys.exit at module scope;
-          # unittest discovery imports them and falsely reports SystemExit as import errors.
-          # Run each suite as a standalone process instead, with its image-test dependencies.
-          python3 -m pip install --disable-pip-version-check opencv-python-headless numpy
           for test_file in tests/e2e/test_*.py; do
             echo "===== Running ${test_file} ====="
             python3 "${test_file}"
           done
-      - name: Install app dependencies and Android platform
+      - name: Install Capacitor and Android dependencies
         working-directory: source/deyn-app
         run: |
           npm install
@@ -96,13 +87,17 @@ jobs:
           npx cap add android
           bash scripts/prepare-android.sh
           npx cap sync android
+          grep -q 'DeynSmsPlugin.class' scripts/prepare-android.sh
+          grep -q 'SEND_SMS' android/app/src/main/AndroidManifest.xml
+          grep -q 'androidx.work:work-runtime' android/app/build.gradle
+          test -s android/app/src/main/java/com/deyn/app/DeynSmsPlugin.java
       - name: Build unsigned debug APK
         working-directory: source/deyn-app/android
         run: ./gradlew --no-daemon assembleDebug
       - name: Upload APK for owner testing only
         uses: actions/upload-artifact@v4
         with:
-          name: deyn-sms-debug-test-only
+          name: deyn-sms-professional-debug-apk
           path: source/deyn-app/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
