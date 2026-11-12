@@ -36,6 +36,20 @@ source = source.replace(anchor, insert + anchor, 1)
 engine = engine_file.read_text(encoding='utf-8')
 runtime = runtime_file.read_text(encoding='utf-8')
 script = '\n<script>\n/* DEYN_SMS_ENGINE_V1 */\n' + engine + '\n' + runtime + '\n</script>\n'
+# Stabilize bottom sheets on small Android viewports and prevent long code cards/time inputs from widening the page.
+style_marker = '<style id="deyn-sms-layout-fix-v2">'
+if style_marker not in source:
+    style = '''<style id="deyn-sms-layout-fix-v2">
+.ovl{overflow:hidden;align-items:flex-end;overscroll-behavior:contain}
+.sheet{box-sizing:border-box;min-height:0;height:auto;max-height:calc(100dvh - env(safe-area-inset-top) - 8px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch;flex:0 1 auto}
+.code-card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;min-width:0;max-width:100%;overflow:hidden}
+.code-card__body,.code-card__value{min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word}
+#modalRoot,.ovl,.sheet{min-width:0;max-width:100%}
+</style>'''
+    source = source.replace('</head>', style + '\\n</head>', 1)
+# Four narrow columns made Android time controls clip; two flexible columns keep every day and time visible.
+source = source.replace('grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px', 'grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px')
+source = source.replace('grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px', 'grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px')
 if '</body>' not in source: raise SystemExit('Missing closing body tag')
 idx = source.rfind('</body>')
 source = source[:idx] + script + source[idx:]
