@@ -5,7 +5,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(C.ledger(c).map(x=>[x.debt.id,x.remai
 const a=C.allocatePayment(c,400); assert.equal(a[0].debtId,'d1'); assert.equal(a[0].amount,300); assert.equal(a[1].debtId,'d2'); assert.equal(a[1].amount,100);
 const before=C.ledger(c)[0].dueAt; const ex=C.extendDebt(c,'d2',2,'weeks',999); assert.equal(ex.to,200000+14*86400000); assert.equal(c.tx[1].extensionHistory.length,1);
 const now=Date.now(); const due=now-2*86400000; const S={settings:{sms:{enabled:true}},customers:[{id:'x',name:'A',phone:'0555123456',smsEnabled:true,honorific:'monsieur',smsLang:'ar',tx:[{id:'dx',type:'debt',amount:100,ts:now-4*86400000,dueAt:due}]}],smsLog:{}};
-const q=C.buildQueue(S,now); assert.equal(q.length,4); assert.equal(q[0].phone,'+213555123456'); assert.match(q[0].message,/السيد/); assert.equal(C.validateBeforeSend(S,q[0],now).ok,true);
+const q=C.buildQueue(S,now); assert.equal(q.length,4); assert.equal(q[0].phone,'+213555123456'); assert.equal(C.phone('213555123456'),'+213555123456'); assert.match(q[0].message,/السيد/); assert.equal(C.validateBeforeSend(S,q[0],now).ok,true);
 S.customers[0].smsEnabled=false; assert.equal(C.validateBeforeSend(S,q[0],now).reason,'customer-disabled'); S.customers[0].smsEnabled=true; S.customers[0].tx[0].amount=150; assert.equal(C.validateBeforeSend(S,q[0],now).reason,'amount-changed');
 console.log('SMS core: allocation, extension, queue, phone normalization, templates, send-time validation passed');
 // Explicit FIFO allocation is stable; a later debt is credited by a payment remainder only when needed.
@@ -40,3 +40,7 @@ const oldReminder=C.buildQueue(extState,extNow)[0]; extState.smsLog[oldReminder.
 C.extendDebt(extState.customers[0],'ed',40,'days',extNow);
 const afterExtend=C.buildQueue(extState,extNow); assert.equal(afterExtend.length,4); assert.ok(afterExtend.every(x=>x.id!==oldReminder.id));
 console.log('SMS extension reschedule: a new due-date cycle is not blocked by old reminder keys');
+// Different reminder stages that are both already due are combined into one SMS for the same customer.
+const mixedStep={settings:{sms:{enabled:true}},customers:[{id:'mix',name:'Mix',phone:'0555123456',tx:[{id:'a',type:'debt',amount:100,ts:comboNow-10*86400000,dueAt:comboNow-2*86400000},{id:'b',type:'debt',amount:200,ts:comboNow-12*86400000,dueAt:comboNow-5*86400000}]}],smsLog:{}};
+const mixQueue=C.buildQueue(mixedStep,comboNow).filter(x=>x.at<=comboNow+1000); assert.equal(mixQueue.length,1); assert.equal(mixQueue[0].amount,300); assert.equal(mixQueue[0].events.length,2);
+console.log('SMS aggregation: overdue debts from different reminder stages are combined without suppression');

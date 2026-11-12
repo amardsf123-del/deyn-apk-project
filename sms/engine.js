@@ -66,7 +66,7 @@
     return {from:base,to:next,debtId};
   }
   const dateLabel = ts => { const d=new Date(ts); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); };
-  const phone = raw => { let s=String(raw||'').replace(/[^\d+]/g,''); if(s.startsWith('00'))s='+'+s.slice(2); if(/^0[567]\d{8}$/.test(s))s='+213'+s.slice(1); return /^\+\d{9,15}$/.test(s)?s:null; };
+  const phone = raw => { let s=String(raw||'').replace(/[^\d+]/g,''); if(s.startsWith('00'))s='+'+s.slice(2); if(/^213[567]\d{8}$/.test(s))s='+'+s; if(/^0[567]\d{8}$/.test(s))s='+213'+s.slice(1); return /^\+\d{9,15}$/.test(s)?s:null; };
   function render(tpl, vars) { return String(tpl||'').replace(/\{(title|name|amount|date|store)\}/g,(_,k)=>String(vars[k]??'')); }
   function buildQueue(S, now) {
     const cfg=config(S.settings&&S.settings.sms||S.settings&&S.settings.smsConfig);
@@ -92,19 +92,18 @@
         }
       }
       // Group all due debts for this customer and reminder step into one SMS; no other debt is suppressed.
-      const byStep=new Map();
-      for(const e of events){ const bucket=e.reminderAt<=now?'due-now':String(e.reminderAt); const group=e.step+'|'+bucket; const a=byStep.get(group)||[]; a.push(e); byStep.set(group,a); }
-      for(const [group,es] of byStep) {
-        const step=es[0].step;
-        const debtIds=es.map(x=>x.debtId).sort();
-        const dueSignature=es.map(x=>`${x.debtId}:${Math.floor(x.dueAt)}`).sort().join(',');
-        const key=`${c.id}|${step}|${dueSignature}`;
+      const groups=new Map();
+      for(const e of events){ const bucket=e.reminderAt<=now?'due-now':String(e.reminderAt); const a=groups.get(bucket)||[]; a.push(e); groups.set(bucket,a); }
+      for(const [bucket,es] of groups) {
+        const debtIds=[...new Set(es.map(x=>x.debtId))].sort();
+        const dueSignature=es.map(x=>`${x.debtId}:${x.step}:${Math.floor(x.dueAt)}`).sort().join(',');
+        const key=`${c.id}|${bucket}|${dueSignature}`;
         if(S.smsLog&&S.smsLog[key]) continue;
         const amount=es.reduce((a,x)=>a+x.remaining,0);
         const due=Math.min(...es.map(x=>x.dueAt));
         const tpl=lang==='fr'?cfg.tplFr:cfg.tplAr;
         const message=render(tpl,{title,name:c.name,amount:Math.round(amount).toLocaleString('en-US'),date:dateLabel(due),store:(S.profile&&S.profile.storeName)||''});
-        pending.push({id:key,key,eventKeys:es.map(x=>x.key),cid:c.id,debtIds,step,phone:phone(c.phone),message,amount,dueAt:due,reminderAt:Math.min(...es.map(x=>x.reminderAt)),overdueDays:Math.max(0,Math.floor((now-due)/DAY))});
+        pending.push({id:key,key,eventKeys:es.map(x=>x.key),events:es.map(x=>({debtId:x.debtId,step:x.step,dueAt:x.dueAt,key:x.key})),cid:c.id,debtIds,step:es[0].step,phone:phone(c.phone),message,amount,dueAt:due,reminderAt:Math.min(...es.map(x=>x.reminderAt)),overdueDays:Math.max(0,...es.map(x=>Math.max(0,Math.floor((now-x.dueAt)/DAY))))});
       }
     }
     pending.sort((a,b)=>(b.overdueDays-a.overdueDays)||(a.dueAt-b.dueAt)||a.cid.localeCompare(b.cid));
@@ -130,7 +129,9 @@
     if(c.smsEnabled===false) return {ok:false,reason:'customer-disabled'};
     const to=phone(c.phone); if(!to||to!==item.phone) return {ok:false,reason:'phone-changed'};
     const open=ledger(c).filter(x=>item.debtIds.includes(x.debt.id)); if(!open.length) return {ok:false,reason:'debt-settled'};
-    const due=open.filter(x=>x.dueAt && now>=localAt(x.dueAt+cfg.days[item.step-1]*DAY,cfg.times[item.step-1]) && !(S.smsLog&&S.smsLog[`${c.id}|${x.debt.id}|${item.step}|${Math.floor(x.dueAt)}`]));
+    const byId=new Map(open.map(x=>[x.debt.id,x]));
+    const dueEvents=(item.events||[]).filter(ev=>{const x=byId.get(ev.debtId);return x&&x.dueAt===ev.dueAt&&now>=localAt(ev.dueAt+cfg.days[ev.step-1]*DAY,cfg.times[ev.step-1])&&!(S.smsLog&&S.smsLog[ev.key]);});
+    const dueIds=new Set(dueEvents.map(x=>x.debtId));const due=open.filter(x=>dueIds.has(x.debt.id));
     if(!due.length) return {ok:false,reason:'not-due'};
     if(S.smsLog&&S.smsLog[item.key]) return {ok:false,reason:'duplicate'};
     const amount=due.reduce((a,x)=>a+x.remaining,0);
