@@ -25,7 +25,7 @@
       </div>
       <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:12px">
         <b style="font-size:13px">فترة الإرسال والتوزيع</b>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"><label class="lbl">بداية الإرسال (ثابتة)<input class="inp num" id="smsStart" type="time" value="09:00" disabled style="direction:ltr"></label><label class="lbl">نهاية الإرسال (حتى 22:00)<input class="inp num" id="smsEnd" type="time" min="09:00" max="22:00" value="${c.end}" style="direction:ltr"></label></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"><label class="lbl">بداية الإرسال (ثابتة)<div class="inp num" aria-label="بداية الإرسال ثابتة 09:00" style="direction:ltr;display:flex;align-items:center;justify-content:center;cursor:default;pointer-events:none;opacity:.8">09:00</div></label><label class="lbl">نهاية الإرسال (حتى 22:00)<input class="inp num" id="smsEnd" type="time" min="09:00" max="22:00" value="${c.end}" style="direction:ltr"></label></div>
         <label class="lbl">الفاصل بين الرسائل (بالدقائق)<input class="inp num" id="smsGap" type="number" min="1" max="60" value="${c.intervalMinutes}" style="direction:ltr"></label>
         <div class="sub">الافتراضي 09:00–22:00. تُرتّب الرسائل حسب أقدم دين متأخر وتُرسل بالتتابع لتجنب الإرسال الجماعي.</div>
       </div>
