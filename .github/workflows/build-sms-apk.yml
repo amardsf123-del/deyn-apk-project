@@ -1,0 +1,72 @@
+name: DEYN SMS Android APK build
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-sms-apk.yml'
+      - '.github/scripts/integrate_sms.py'
+      - 'sms-feature.patch'
+      - 'DeynSmsPlugin.java'
+      - 'deyn-apk-project.zip'
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Extract real project archive
+        run: |
+          set -euo pipefail
+          test -s deyn-apk-project.zip
+          mkdir source
+          unzip -q deyn-apk-project.zip -d source
+      - name: Integrate SMS into real app source
+        run: python3 .github/scripts/integrate_sms.py source sms-feature.patch DeynSmsPlugin.java
+      - name: Check integrated JavaScript
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess, tempfile
+          html = Path('source/deyn-app/www/index.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script(?:\\s[^>]*)?>([\\s\\S]*?)</script\\s*>', html, re.I)
+          if not scripts:
+              raise SystemExit('No inline scripts found')
+          for i, script in enumerate(scripts):
+              if script.strip():
+                  p = Path(tempfile.gettempdir()) / f'deyn-{i}.js'
+                  p.write_text(script, encoding='utf-8')
+                  subprocess.run(['node', '--check', str(p)], check=True)
+          PY
+      - name: Install Capacitor and Android dependencies
+        working-directory: source/deyn-app
+        run: |
+          npm install
+          python3 scripts/fetch_fonts.py
+          npx cap add android
+          bash scripts/prepare-android.sh
+          npx cap sync android
+      - name: Build unsigned debug APK
+        working-directory: source/deyn-app/android
+        run: ./gradlew --no-daemon assembleDebug
+      - name: Upload APK for owner testing only
+        uses: actions/upload-artifact@v4
+        with:
+          name: deyn-sms-professional-debug-apk
+          path: source/deyn-app/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
