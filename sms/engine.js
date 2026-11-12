@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const DAY = 86400000;
-  const DEFAULTS = Object.freeze({ enabled:false, days:[1,4,8,15], times:['10:00','11:00','16:00','10:00'], start:'09:00', end:'22:00', intervalMinutes:5, tplAr:'السلام عليكم {name}، عليكم {amount} دج منذ {date}. شكرا.', tplFr:'Bonjour {title} {name}, solde de {amount} DA dû depuis le {date}. Merci.', storeName:'' });
+  const DEFAULTS = Object.freeze({ enabled:false, days:[1,4,8,15], times:['10:00','11:00','16:00','10:00'], start:'09:00', end:'22:00', intervalMinutes:5, tplAr:'السلام عليكم {title} {name}، عليكم {amount} دج منذ {date}. شكرا.', tplFr:'Bonjour {title} {name}, solde de {amount} DA dû depuis le {date}. Merci.', storeName:'' });
   const clone = x => JSON.parse(JSON.stringify(x));
   function stableHash(value) { let a=2166136261,b=0x9e3779b9; const s=String(value); for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);a=Math.imul(a^c,16777619);b=Math.imul(b^c,2246822519);}return (a>>>0).toString(36)+(b>>>0).toString(36); }
   const validDate = n => Number.isFinite(Number(n)) && Number(n) > 0;
@@ -69,7 +69,7 @@
   }
   const dateLabel = ts => { const d=new Date(ts); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); };
   const phone = raw => { let s=String(raw||'').replace(/[^\d+]/g,''); if(s.startsWith('00'))s='+'+s.slice(2); if(/^213[567]\d{8}$/.test(s))s='+'+s; if(/^0[567]\d{8}$/.test(s))s='+213'+s.slice(1); return /^\+\d{9,15}$/.test(s)?s:null; };
-  function render(tpl, vars) { return String(tpl||'').replace(/\{(title|name|amount|date|store)\}/g,(_,k)=>String(vars[k]??'')).replace(/[ \\t]{2,}/g,' ').trim(); }
+  function render(tpl, vars) { return String(tpl||'').replace(/\{(title|name|amount|date|store)\}/g,(_,k)=>String(vars[k]??'')).replace(/\s{2,}/g,' ').trim(); }
   // A dedicated one-part Unicode test avoids testing multipart delivery with an unnecessarily long template.
   function testMessage(date) { return `DEYN: اختبار SMS ناجح - ${String(date||'')}`.trim(); }
   function buildQueue(S, now) {
