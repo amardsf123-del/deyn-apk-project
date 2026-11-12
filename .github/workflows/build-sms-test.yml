@@ -3,12 +3,13 @@ name: DEYN SMS integration - debug test only
 
 on:
   push:
-    branches: [sms-integration-files]
+    branches: [sms-professional-2026]
     paths:
       - '.github/workflows/build-sms-test.yml'
       - '.github/scripts/integrate_sms.py'
       - 'sms-feature.patch'
       - 'DeynSmsPlugin.java'
+      - 'deyn-apk-project.zip'
   workflow_dispatch:
 
 permissions:
