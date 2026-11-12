@@ -84,17 +84,17 @@
     const p=plug();if(!p||syncBusy||!S)return;
     syncBusy=true;
     try{
-      if(isWorkerDevice()||!cfg().enabled){await p.schedule({items:[]});if(S.smsQueueMeta)S.smsQueueMeta={};return;}
+      if(isWorkerDevice()||!cfg().enabled){await p.schedule({items:[]});if(S.smsQueueMeta&&Object.keys(S.smsQueueMeta).length){S.smsQueueMeta={};try{originalPersist();if(typeof deynFlush==='function')await deynFlush();}catch(e){console.warn('SMS queue metadata cleanup',e);}}return;}
       const permission=await p.checkPermissions();
       if(!permission||permission.sms!=='granted'){cfg().enabled=false;await p.schedule({items:[]});persist();toast('تم إيقاف SMS لأن إذن الرسائل غير متاح','err');return;}
       if(!S.smsLog)S.smsLog={};if(!S.smsQueueMeta)S.smsQueueMeta={};
-      let changed=false;
+      const metaBefore=JSON.stringify(S.smsQueueMeta);let changed=false;
       try{const sent=await p.getSent();const sentItems=(sent&&sent.items)||((sent&&sent.ids)||[]).map(id=>({id,acceptedAt:Date.now(),status:'accepted_by_android'}));const uncertain=(sent&&sent.uncertain)||[];for(const item of sentItems.concat(uncertain)){const id=item.id;if(!id||id.startsWith('test-')||S.smsLog[id])continue;const meta=S.smsQueueMeta[id]||{};const rec={at:Number(item.acceptedAt)||Date.now(),status:item.status==='dispatch_uncertain'?'dispatch_uncertain':'accepted_by_android',customerName:meta.customerName||'',phone:meta.phone||''};S.smsLog[id]=rec;for(const k of meta.eventKeys||[])S.smsLog[k]=Object.assign({},rec,{internal:true});delete S.smsQueueMeta[id];changed=true;}}catch(e){console.warn('SMS history sync',e);}
       const now=Date.now();const queue=Core.buildQueue(S,now);
       const active=new Set(queue.map(x=>x.id));
       for(const id of Object.keys(S.smsQueueMeta))if(!active.has(id))delete S.smsQueueMeta[id];
       for(const item of queue){S.smsQueueMeta[item.id]={eventKeys:item.eventKeys,customerName:((S.customers||[]).find(c=>c.id===item.cid)||{}).name||'',phone:item.phone};}
-      let durable=true;if(changed||queue.length){try{const saved=originalPersist();if(saved===false)durable=false;else if(typeof deynFlush==='function')await deynFlush();}catch(e){durable=false;console.warn('SMS state flush failed',e);}}
+      const metaChanged=metaBefore!==JSON.stringify(S.smsQueueMeta);let durable=true;if(changed||queue.length||metaChanged){try{const saved=originalPersist();if(saved===false)durable=false;else if(typeof deynFlush==='function')await deynFlush();}catch(e){durable=false;console.warn('SMS state flush failed',e);}}
       if(!durable){await p.schedule({items:[]});return;}
       const items=queue.filter(x=>!S.smsLog[x.id]&&(x.at>now||Core.validateBeforeSend(S,x,now).ok)).map(x=>({id:x.id,phone:x.phone,message:x.message,at:x.at,gapMinutes:x.gapMinutes}));
       await p.schedule({items});
