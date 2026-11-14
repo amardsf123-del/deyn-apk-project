@@ -172,3 +172,15 @@ assert.equal(JSON.stringify(globalToggleState.customers), preferenceSnapshot);
 C.setGlobalEnabled(globalToggleState, false);
 assert.equal(JSON.stringify(globalToggleState.customers), preferenceSnapshot);
 console.log('SMS global-toggle regression: global enable/disable preserves all per-customer preferences');
+
+
+// A repeated app-state persist later on the same local day must not change queued timestamps.
+const stableLaterNow = exactNow + 60 * 60000;
+const stableFirstPlan = C.buildQueue(exactState, exactNow);
+const stableSecondPlan = C.buildQueue(exactState, stableLaterNow);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(stableFirstPlan.map(x => [x.id, x.at]))),
+  JSON.parse(JSON.stringify(stableSecondPlan.map(x => [x.id, x.at]))),
+  'rescheduling the same queue later in the same day must keep stable native WorkManager timestamps'
+);
+console.log('SMS schedule stability regression: routine app persists do not move queued reminders within the same day');
