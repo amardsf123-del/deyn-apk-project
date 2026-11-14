@@ -294,7 +294,9 @@
     // One ordered queue for the whole shop, with a configurable minimum gap and a strict sending window.
     const start=parseTime('09:00'), end=parseTime(cfg.end); const startMin=start[0]*60+start[1], endMin=end[0]*60+end[1];
     const effectiveGap=Math.min(cfg.intervalMinutes,Math.max(1,Math.floor((endMin-startMin)/Math.max(1,pending.length))));
-    let cursor=now, out=[];
+    // Use a stable day anchor rather than the current millisecond. Runtime rescheduling on every persist
+    // must not change the native payload timestamp and cancel the same reminder repeatedly.
+    let cursor=localAt(now,cfg.start), out=[];
     for(const item of pending) {
       const d=new Date(cursor), mins=d.getHours()*60+d.getMinutes();
       if(mins<startMin) cursor=localAt(cursor,cfg.start);
