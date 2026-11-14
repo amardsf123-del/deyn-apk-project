@@ -1,1 +1,1 @@
-Temporary trigger for the existing DEYN debug APK build workflow. This does not change app source.
+Trigger DEYN debug APK build after adapting archive path discovery.
