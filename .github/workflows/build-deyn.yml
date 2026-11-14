@@ -1,52 +1,109 @@
-name: Build DEYN APKs
+name: Build DEYN APKs with SMS delivery verification
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, fix/sms-reliability-2026-11-14]
     paths:
       - 'deyn-apk-project.zip'
       - '.github/build-now.txt'
       - '.github/workflows/build-deyn.yml'
+      - '.github/scripts/integrate_sms.py'
+      - '.github/scripts/verify_sms_delivery.py'
+      - 'sms/**'
+      - 'DeynSmsPlugin.java'
+      - 'DeynBackupPlugin.java'
+      - 'DeynNotifPlugin.java'
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         app: [deyn-app, deyn-keygen]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
-      - name: Extract project archive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Extract and locate the exact PRO_4 project
+        shell: bash
         run: |
           set -euo pipefail
           test -s deyn-apk-project.zip
+          mkdir -p source
           unzip -q deyn-apk-project.zip -d source
-          echo "Archive top-level entries:"
-          find source -mindepth 1 -maxdepth 3 -print | sort | head -160
-      - name: Locate application directory
+          PROJECT_ROOT="$(find source -mindepth 1 -maxdepth 3 -type d -name PRO_4 -print -quit)"
+          if [ -z "$PROJECT_ROOT" ]; then
+            echo "::error::PRO_4 project root not found in deyn-apk-project.zip"
+            find source -maxdepth 4 -type f -name package.json -print
+            exit 1
+          fi
+          test -s "$PROJECT_ROOT/deyn-app/package.json"
+          test -s "$PROJECT_ROOT/deyn-keygen/package.json"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+          echo "Verified app source root: $PROJECT_ROOT"
+
+      - name: Repair, test, and integrate SMS into the actual Android source
+        if: matrix.app == 'deyn-app'
+        shell: bash
         run: |
           set -euo pipefail
-          echo "Available package.json files:"
-          find source -type f -name package.json -print | sort
-          manifest="$(find source -type f -path "*/${{ matrix.app }}/package.json" -print -quit)"
-          if [ -z "$manifest" ]; then
-            echo "SKIP_BUILD=true" >> "$GITHUB_ENV"
-            echo "::warning::${{ matrix.app }} is not present in this archive; skipping this target."
-            exit 0
-          fi
-          echo "APP_DIR=$(dirname "$manifest")" >> "$GITHUB_ENV"
-          echo "Building from $(dirname "$manifest")"
-      - name: Build APK
-        if: env.SKIP_BUILD != 'true'
+          python3 .github/scripts/integrate_sms.py "$PROJECT_ROOT" sms/engine.js DeynSmsPlugin.java
+          node sms/test.mjs | tee sms-engine-tests.log
+          python3 .github/scripts/verify_sms_delivery.py | tee sms-static-checks.log
+
+      - name: Verify all integrated JavaScript syntax
+        if: matrix.app == 'deyn-app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess, tempfile
+          html = Path("${{ env.PROJECT_ROOT }}/deyn-app/www/index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script\s*>', html, re.I)
+          checked = 0
+          with tempfile.TemporaryDirectory(prefix="deyn-js-") as td:
+              for index, script in enumerate(scripts):
+                  if not script.strip():
+                      continue
+                  path = Path(td) / f"inline-{index}.js"
+                  path.write_text(script, encoding="utf-8")
+                  subprocess.run(["node", "--check", str(path)], check=True)
+                  checked += 1
+          if checked < 1:
+              raise SystemExit("No inline JavaScript blocks were checked")
+          print(f"JavaScript syntax OK: {checked} inline script blocks")
+          PY
+
+      - name: Select app directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_DIR="$PROJECT_ROOT/${{ matrix.app }}"
+          test -s "$APP_DIR/package.json"
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+          echo "Building ${{ matrix.app }} from $APP_DIR"
+
+      - name: Build debug APK
+        shell: bash
         run: |
           set -euo pipefail
           cd "$APP_DIR"
@@ -56,12 +113,24 @@ jobs:
           bash scripts/prepare-android.sh
           npx cap sync android
           cd android
-          ./gradlew assembleDebug
-      - name: Upload debug APK for testing only
-        if: env.SKIP_BUILD != 'true'
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload debug APK for testing
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.app }}-debug-apk
+          name: ${{ matrix.app }}-sms-reliability-debug-apk
           path: ${{ env.APP_DIR }}/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload SMS verification evidence
+        if: matrix.app == 'deyn-app'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deyn-sms-verification-evidence
+          path: |
+            sms-engine-tests.log
+            sms-static-checks.log
+            ${{ env.PROJECT_ROOT }}/deyn-app/www/index.html
           if-no-files-found: error
           retention-days: 14
