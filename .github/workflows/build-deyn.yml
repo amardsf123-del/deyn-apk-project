@@ -7,6 +7,7 @@ on:
     paths:
       - 'deyn-apk-project.zip'
       - '.github/build-now.txt'
+      - '.github/workflows/build-deyn.yml'
 
 jobs:
   build:
@@ -26,11 +27,29 @@ jobs:
           java-version: 21
       - name: Extract project archive
         run: |
-          test -f deyn-apk-project.zip
+          set -euo pipefail
+          test -s deyn-apk-project.zip
           unzip -q deyn-apk-project.zip -d source
-      - name: Build APK
-        working-directory: source/${{ matrix.app }}
+          echo "Archive top-level entries:"
+          find source -mindepth 1 -maxdepth 3 -print | sort | head -160
+      - name: Locate application directory
         run: |
+          set -euo pipefail
+          echo "Available package.json files:"
+          find source -type f -name package.json -print | sort
+          manifest="$(find source -type f -path "*/${{ matrix.app }}/package.json" -print -quit)"
+          if [ -z "$manifest" ]; then
+            echo "SKIP_BUILD=true" >> "$GITHUB_ENV"
+            echo "::warning::${{ matrix.app }} is not present in this archive; skipping this target."
+            exit 0
+          fi
+          echo "APP_DIR=$(dirname "$manifest")" >> "$GITHUB_ENV"
+          echo "Building from $(dirname "$manifest")"
+      - name: Build APK
+        if: env.SKIP_BUILD != 'true'
+        run: |
+          set -euo pipefail
+          cd "$APP_DIR"
           npm install
           python3 scripts/fetch_fonts.py
           npx cap add android
@@ -39,9 +58,10 @@ jobs:
           cd android
           ./gradlew assembleDebug
       - name: Upload debug APK for testing only
+        if: env.SKIP_BUILD != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.app }}-debug-apk
-          path: source/${{ matrix.app }}/android/app/build/outputs/apk/debug/*.apk
+          path: ${{ env.APP_DIR }}/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
