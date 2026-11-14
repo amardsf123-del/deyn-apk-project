@@ -78,7 +78,7 @@ jobs:
           from pathlib import Path
           import re, subprocess, tempfile
           html = Path("${{ env.PROJECT_ROOT }}/deyn-app/www/index.html").read_text(encoding="utf-8")
-          scripts = re.findall(r'<script(?:\\s[^>]*)?>([\\s\\S]*?)</script\\s*>', html, re.I)
+          scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script\s*>', html, re.I)
           checked = 0
           with tempfile.TemporaryDirectory(prefix="deyn-js-") as td:
               for index, script in enumerate(scripts):
