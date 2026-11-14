@@ -184,3 +184,10 @@ assert.deepEqual(
   'rescheduling the same queue later in the same day must keep stable native WorkManager timestamps'
 );
 console.log('SMS schedule stability regression: routine app persists do not move queued reminders within the same day');
+
+
+// A reminder's native id must survive the exact moment its scheduled time becomes overdue.
+const beforeReminderQueue = C.buildQueue(exactState, exactNow - 30 * 60000);
+const afterReminderQueue = C.buildQueue(exactState, exactNow + 30 * 60000);
+assert.equal(beforeReminderQueue.find(x => x.step === 1).id, afterReminderQueue.find(x => x.step === 1).id);
+console.log('SMS idempotency regression: a queued reminder retains its id when the scheduled time passes');
