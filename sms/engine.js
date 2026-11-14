@@ -278,7 +278,8 @@
       for(const [bucket,es] of groups) {
         const debtIds=[...new Set(es.map(x=>x.debtId))].sort();
         const dueSignature=es.map(x=>`${x.debtId}:${x.step}:${Math.floor(x.dueAt)}`).sort().join(',');
-        const key=`${c.id}|${bucket}|${stableHash(dueSignature)}`;
+        // Keep an event group's id unchanged as its reminder moves from future to overdue.
+        const key=`${c.id}|${stableHash(dueSignature)}`;
         if(S.smsLog&&isLogBlocking(S.smsLog[key])) continue;
         const amount=es.reduce((a,x)=>a+x.remaining,0);
         const due=Math.min(...es.map(x=>x.dueAt));
