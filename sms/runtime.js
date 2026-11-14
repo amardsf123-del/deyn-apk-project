@@ -68,7 +68,7 @@
     const hideArByDefault = isFr();
     openModal(()=>`${sheetHead('إعدادات رسائل SMS')}
       <div class="sub" style="line-height:1.8">ترسل الرسائل من شريحة هاتف المالك فقط. يجب توفر رصيد SMS وشبكة الهاتف. قبول أندرويد للرسالة لا يعني تأكيد وصولها إلى هاتف الزبون.</div>
-      <div class="row-set" style="margin-top:10px"><div><b>تفعيل الرسائل النصية</b><small>عند التفعيل، يتم تمكين كل الزبائن الذين لديهم رقم هاتف. يمكنك تعطيل أي زبون بشكل فردي.</small></div><label class="sw"><input type="checkbox" id="smsGlobal" ${c.enabled?'checked':''}><i></i></label></div>
+      <div class="row-set" style="margin-top:10px"><div><b>تفعيل الرسائل النصية</b><small>عند التفعيل، تستأنف التذكيرات للزبائن المسموح لهم فقط. إيقاف الزبون بشكل فردي يبقى محفوظًا.</small></div><label class="sw"><input type="checkbox" id="smsGlobal" ${c.enabled?'checked':''}><i></i></label></div>
       <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:10px">
         <b style="font-size:13px">جدول التذكير بعد الاستحقاق</b>
         <div class="sub">الأيام الافتراضية: 1 و4 و8 و15، ويمكن تغييرها.</div>
