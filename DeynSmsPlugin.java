@@ -229,8 +229,10 @@ public class DeynSmsPlugin extends Plugin {
                 if ((!active.contains(oldId) || changedPayloadIds.contains(oldId))
                     && !isTerminalOrInFlight(context, oldId)) {
                     // Keep an in-flight dispatch alive so its sent/failure PendingIntents can finish.
-                    wm.cancelUniqueWork("deyn_sms_" + oldId);
-                    wm.cancelUniqueWork("deyn_sms_deferred_" + oldId);
+                    // Wait for cancellation to finish before enqueueing the replacement under KEEP.
+                    // Otherwise WorkManager may still see the old request and skip the new payload.
+                    wm.cancelUniqueWork("deyn_sms_" + oldId).getResult().get(30, TimeUnit.SECONDS);
+                    wm.cancelUniqueWork("deyn_sms_deferred_" + oldId).getResult().get(30, TimeUnit.SECONDS);
                 }
             }
             long now = System.currentTimeMillis();
