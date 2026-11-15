@@ -166,8 +166,8 @@ jobs:
                   raise SystemExit("FAIL: assets/public/index.html not found in APK")
               html=z.read(target).decode("utf-8",errors="replace")
           checks={
-    "French thousands wording (mille)": " mille" in html,
-    "French million wording": "1 million" in html and " millions" in html,
+              "French thousands wording (mille)": " mille" in html,
+              "French million wording": "1 million" in html and " millions" in html,
               "Device ID migration function (deynLegacyIdBacksLicense)": "deynLegacyIdBacksLicense" in html,
               "Old random fallback absent": "if(!id){var b=new Uint8Array(16)" not in html,
           }
