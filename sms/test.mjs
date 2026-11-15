@@ -191,3 +191,40 @@ const beforeReminderQueue = C.buildQueue(exactState, exactNow - 30 * 60000);
 const afterReminderQueue = C.buildQueue(exactState, exactNow + 30 * 60000);
 assert.equal(beforeReminderQueue.find(x => x.step === 1).id, afterReminderQueue.find(x => x.step === 1).id);
 console.log('SMS idempotency regression: a queued reminder retains its id when the scheduled time passes');
+
+// Regression: a full payment before dispatch cancels the reminder; a partial payment rebuilds it
+// with the current balance, and a stale queued snapshot is rejected before dispatch.
+const paymentBase = {
+  settings: { sms: { enabled: true, times: ['14:15', '11:00', '16:00', '10:00'] } },
+  customers: [{
+    id: 'payment-check', name: 'Payment Check', phone: '0555123456',
+    tx: [{ id: 'payment-debt', type: 'debt', amount: 100, ts: exactDue - 5 * 86400000, dueAt: exactDue }]
+  }],
+  smsLog: {}
+};
+const queuedBeforePayment = C.buildQueue(paymentBase, exactNow, 'ar').find(x => x.step === 1);
+assert.ok(queuedBeforePayment, 'an unpaid overdue debt must have a day-1 reminder');
+const fullyPaid = JSON.parse(JSON.stringify(paymentBase));
+fullyPaid.customers[0].tx.push({
+  id: 'payment-full', type: 'pay', amount: 100, ts: exactNow - 1000,
+  allocations: [{ debtId: 'payment-debt', amount: 100 }]
+});
+assert.equal(C.ledger(fullyPaid.customers[0]).length, 0, 'a fully paid debt must disappear from the outstanding ledger');
+assert.equal(C.buildQueue(fullyPaid, exactNow, 'ar').length, 0, 'a fully paid debt must not produce any reminder');
+assert.equal(C.validateBeforeSend(fullyPaid, queuedBeforePayment, exactNow).reason, 'debt-settled',
+  'a stale queued reminder must be rejected after full payment');
+
+const partiallyPaid = JSON.parse(JSON.stringify(paymentBase));
+partiallyPaid.customers[0].tx.push({
+  id: 'payment-partial', type: 'pay', amount: 40, ts: exactNow - 1000,
+  allocations: [{ debtId: 'payment-debt', amount: 40 }]
+});
+const refreshedPartial = C.buildQueue(partiallyPaid, exactNow, 'ar').find(x => x.step === 1);
+assert.ok(refreshedPartial, 'a partially paid debt must keep its reminder');
+assert.equal(refreshedPartial.amount, 60, 'the reminder amount must reflect the remaining balance');
+assert.notEqual(refreshedPartial.message, queuedBeforePayment.message, 'the message must be rebuilt after a partial payment');
+assert.equal(C.validateBeforeSend(partiallyPaid, queuedBeforePayment, exactNow).reason, 'amount-changed',
+  'a stale queued snapshot must be rejected after a partial payment');
+assert.equal(C.validateBeforeSend(partiallyPaid, refreshedPartial, exactNow).ok, true,
+  'the refreshed partial-balance reminder must pass send-time validation');
+console.log('SMS payment regression: full payment cancels reminders; partial payment refreshes amount and rejects stale payloads');
