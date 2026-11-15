@@ -116,7 +116,7 @@
   function customerDueDate(c, referenceDate) {
     const day=Number(c&&c.payDay);
     if(!Number.isInteger(day)||day<1||day>31) return null;
-    const ts=Number.isFinite(Number(now))?Number(now):Date.now();
+    const ts=Number.isFinite(Number(referenceDate))?Number(referenceDate):Date.now();
     const current=new Date(ts);
     const year=current.getFullYear(), month=current.getMonth();
     const lastDay=new Date(year,month+1,0).getDate();
