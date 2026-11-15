@@ -110,12 +110,13 @@
     if (due < Number(ts)) { const nm=m+1; due=new Date(y,nm,Math.min(n,new Date(y,nm+1,0).getDate()),23,59,59,999).getTime(); }
     return due;
   }
-  // The merchant's pay day is a calendar-day rule for the current monthly cycle.
-  // It is deliberately independent of the timestamp when a debt transaction was created.
-  function customerDueDate(c, now) {
+  // Resolve the customer's configured pay day within the calendar month of the reference date.
+  // For debt records, the reference date is the transaction timestamp so the derived due date
+  // remains stable across later months and never shifts merely because the app is reopened.
+  function customerDueDate(c, referenceDate) {
     const day=Number(c&&c.payDay);
     if(!Number.isInteger(day)||day<1||day>31) return null;
-    const ts=Number.isFinite(Number(now))?Number(now):Date.now();
+    const ts=Number.isFinite(Number(referenceDate))?Number(referenceDate):Date.now();
     const current=new Date(ts);
     const year=current.getFullYear(), month=current.getMonth();
     const lastDay=new Date(year,month+1,0).getDate();
@@ -127,7 +128,7 @@
     const d=debt||{};
     if(validDate(d.dueAt)) return Number(d.dueAt);
     if(validDate(d.originalDueAt)) return Number(d.originalDueAt);
-    if(d.dueDateMode==='monthly' || c&&c.payDay) return customerDueDate(c,now);
+    if(d.dueDateMode==='monthly' || c&&c.payDay) return customerDueDate(c,validDate(d.ts)?Number(d.ts):now);
     return null;
   }
   function calendarDayDifference(fromTs, toTs) {
@@ -175,7 +176,7 @@
     // Show the earliest outstanding due date: the most overdue debt wins;
     // otherwise show the nearest upcoming fixed or monthly due date.
     const dueAt=Math.min(...open.map(x=>Number(x.dueAt)));
-    const dueDate=new Date(dueAt), today=new Date(ts);
+    const dueDate=new Date(dueAt);
     const diff=calendarDayDifference(ts,dueAt)*-1;
     const day=dueDate.getDate();
     if(diff>0) {
