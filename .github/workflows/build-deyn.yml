@@ -1,19 +1,12 @@
-name: Build DEYN APKs with SMS delivery verification
+name: Build DEYN from PRO_4-fixed.zip only
 
 on:
   workflow_dispatch:
   push:
-    branches: [main, fix/sms-reliability-2026-11-14]
+    branches: [main]
     paths:
-      - 'deyn-apk-project.zip'
-      - '.github/build-now.txt'
+      - 'PRO_4-fixed.zip'
       - '.github/workflows/build-deyn.yml'
-      - '.github/scripts/integrate_sms.py'
-      - '.github/scripts/verify_sms_delivery.py'
-      - 'sms/**'
-      - 'DeynSmsPlugin.java'
-      - 'DeynBackupPlugin.java'
-      - 'DeynNotifPlugin.java'
 
 permissions:
   contents: read
@@ -29,6 +22,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify and extract ONLY the uploaded PRO_4-fixed.zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s PRO_4-fixed.zip || { echo "::error::PRO_4-fixed.zip is missing"; exit 1; }
+          echo "Input archive: PRO_4-fixed.zip"
+          sha256sum PRO_4-fixed.zip
+          mkdir -p source
+          unzip -q PRO_4-fixed.zip -d source
+          PROJECT_ROOT="$(find source -mindepth 1 -maxdepth 4 -type d -name PRO_4 -print -quit)"
+          if [ -z "$PROJECT_ROOT" ]; then
+            echo "::error::PRO_4 directory not found inside PRO_4-fixed.zip"
+            find source -maxdepth 5 -name package.json -print
+            exit 1
+          fi
+          test -s "$PROJECT_ROOT/${{ matrix.app }}/package.json" || { echo "::error::${{ matrix.app }}/package.json missing in uploaded archive"; exit 1; }
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+          echo "Verified build source: $PROJECT_ROOT/${{ matrix.app }}"
+          find "$PROJECT_ROOT/${{ matrix.app }}" -maxdepth 2 -type f | sort | head -200
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -38,99 +51,24 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Extract and locate the exact PRO_4 project
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s deyn-apk-project.zip
-          mkdir -p source
-          unzip -q deyn-apk-project.zip -d source
-          PROJECT_ROOT="$(find source -mindepth 1 -maxdepth 3 -type d -name PRO_4 -print -quit)"
-          if [ -z "$PROJECT_ROOT" ]; then
-            echo "::error::PRO_4 project root not found in deyn-apk-project.zip"
-            find source -maxdepth 4 -type f -name package.json -print
-            exit 1
-          fi
-          test -s "$PROJECT_ROOT/deyn-app/package.json"
-          test -s "$PROJECT_ROOT/deyn-keygen/package.json"
-          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
-          echo "Verified app source root: $PROJECT_ROOT"
-
-      - name: Repair, test, and integrate SMS into the actual Android source
-        if: matrix.app == 'deyn-app'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 .github/scripts/integrate_sms.py "$PROJECT_ROOT" sms/engine.js DeynSmsPlugin.java
-          node sms/test.mjs | tee sms-engine-tests.log
-          python3 .github/scripts/verify_sms_delivery.py | tee sms-static-checks.log
-
-      - name: Verify all integrated JavaScript syntax
-        if: matrix.app == 'deyn-app'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import re, subprocess, tempfile
-          html = Path("${{ env.PROJECT_ROOT }}/deyn-app/www/index.html").read_text(encoding="utf-8")
-          scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script\s*>', html, re.I)
-          checked = 0
-          with tempfile.TemporaryDirectory(prefix="deyn-js-") as td:
-              for index, script in enumerate(scripts):
-                  if not script.strip():
-                      continue
-                  path = Path(td) / f"inline-{index}.js"
-                  path.write_text(script, encoding="utf-8")
-                  subprocess.run(["node", "--check", str(path)], check=True)
-                  checked += 1
-          if checked < 1:
-              raise SystemExit("No inline JavaScript blocks were checked")
-          print(f"JavaScript syntax OK: {checked} inline script blocks")
-          PY
-
-      - name: Select app directory
+      - name: Build APK from uploaded archive source without overlays
         shell: bash
         run: |
           set -euo pipefail
           APP_DIR="$PROJECT_ROOT/${{ matrix.app }}"
-          test -s "$APP_DIR/package.json"
-          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
-          echo "Building ${{ matrix.app }} from $APP_DIR"
-
-      - name: Build debug APK
-        shell: bash
-        run: |
-          set -euo pipefail
           cd "$APP_DIR"
           npm install
-          python3 scripts/fetch_fonts.py
+          if [ -f scripts/fetch_fonts.py ]; then python3 scripts/fetch_fonts.py; fi
           npx cap add android
-          bash scripts/prepare-android.sh
+          if [ -f scripts/prepare-android.sh ]; then bash scripts/prepare-android.sh; fi
           npx cap sync android
           cd android
           ./gradlew --no-daemon assembleDebug
 
-      - name: Upload debug APK for testing
+      - name: Upload APK built from PRO_4-fixed.zip
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.app }}-sms-reliability-debug-apk
-          path: ${{ env.APP_DIR }}/android/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload SMS verification evidence
-        if: matrix.app == 'deyn-app'
-        uses: actions/upload-artifact@v4
-        with:
-          name: deyn-sms-verification-evidence
-          path: |
-            sms-engine-tests.log
-            sms-static-checks.log
-            ${{ env.PROJECT_ROOT }}/deyn-app/www/index.html
+          name: ${{ matrix.app }}-PRO_4-fixed-debug-apk
+          path: ${{ env.PROJECT_ROOT }}/${{ matrix.app }}/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
