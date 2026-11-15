@@ -74,7 +74,7 @@
       <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:10px">
         <b style="font-size:13px">جدول التذكير بعد الاستحقاق</b>
         <div class="sub">الأيام الافتراضية: 1 و4 و8 و15، ويمكن تغييرها.</div>
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">${c.days.map((d,i)=>`<label style="font-size:11px;color:var(--mute)">اليوم ${i+1}<input class="inp num" id="smsDay${i}" type="number" min="1" max="90" value="${d}" style="margin-top:4px;padding:8px 5px;height:40px;text-align:center"></label>`).join('')}</div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">${c.days.map((d,i)=>`<label style="font-size:11px;color:var(--mute)">التذكير ${i+1} • بعد الاستحقاق<input class="inp num" id="smsDay${i}" type="number" min="1" max="90" value="${d}" style="margin-top:4px;padding:8px 5px;height:40px;text-align:center"></label>`).join('')}</div>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">${c.times.map((t,i)=>`<label style="font-size:11px;color:var(--mute)">وقت التذكير ${i+1}<input class="inp num" id="smsTime${i}" type="time" min="09:00" max="${c.end}" value="${t}" style="margin-top:4px;padding:6px 2px;height:40px;text-align:center"></label>`).join('')}</div>
       </div>
       <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:12px">
