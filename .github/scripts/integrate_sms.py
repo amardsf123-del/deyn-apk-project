@@ -37,7 +37,7 @@ source = re.sub(r'\n?<script(?:\s+id="deyn-i18n-bundle")?>\s*/\*\s*DEYN_I18N_RUN
 
 # 1. Show the individual due date and any extensions in the customer's debt ledger.
 due_anchor = '<small class="num">${dateStr(t.ts)} ${timeStr(t.ts)}</small>'
-due_replacement = """<small class="num">${dateStr(t.ts)} ${timeStr(t.ts)}${t.type === 'debt' ? (() => { const dueAt = Number(t.dueAt) || (c.payDay ? window.DeynSmsCore.getDebtDueDate(c, t, Date.now()) : null); return dueAt ? ' • الاستحقاق ' + dateStr(dueAt) + (Array.isArray(t.extensionHistory) && t.extensionHistory.length ? ' • تمديد ' + t.extensionHistory.length : '') : ''; })() : ''}</small>"""
+due_replacement = """<small class="num">${dateStr(t.ts)} ${timeStr(t.ts)}${t.type === 'debt' ? (() => { const dueAt = Number(t.dueAt) || window.DeynSmsCore.getDebtDueDate(c, t, Date.now()); return dueAt ? ' • الاستحقاق ' + dateStr(dueAt) + (Array.isArray(t.extensionHistory) && t.extensionHistory.length ? ' • تمديد ' + t.extensionHistory.length : '') : ''; })() : ''}</small>"""
 if due_replacement not in source:
     if source.count(due_anchor) != 1:
         raise SystemExit('Could not locate the unique debt transaction date label')
