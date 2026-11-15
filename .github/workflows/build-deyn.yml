@@ -88,7 +88,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re, subprocess, tempfile
-          html = Path("\${{ env.PROJECT_ROOT }}/deyn-app/www/index.html").read_text(encoding="utf-8")
+          html = Path("${{ env.PROJECT_ROOT }}/deyn-app/www/index.html").read_text(encoding="utf-8")
           scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script\s*>', html, re.I)
           checked = 0
           with tempfile.TemporaryDirectory(prefix="deyn-js-") as td:
@@ -108,10 +108,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APP_DIR="$PROJECT_ROOT/\${{ matrix.app }}"
+          APP_DIR="$PROJECT_ROOT/${{ matrix.app }}"
           test -s "$APP_DIR/package.json"
           echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
-          echo "Building \${{ matrix.app }} from $APP_DIR"
+          echo "Building ${{ matrix.app }} from $APP_DIR"
 
       - name: Build debug APK from integrated source
         shell: bash
@@ -130,8 +130,8 @@ jobs:
       - name: Upload integrated debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: \${{ matrix.app }}-sms-reliability-debug-apk
-          path: \${{ env.APP_DIR }}/android/app/build/outputs/apk/debug/*.apk
+          name: ${{ matrix.app }}-sms-reliability-debug-apk
+          path: ${{ env.APP_DIR }}/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -143,7 +143,7 @@ jobs:
           path: |
             sms-engine-tests.log
             sms-static-checks.log
-            \${{ env.PROJECT_ROOT }}/deyn-app/www/index.html
-            \${{ env.PROJECT_ROOT }}/deyn-app/scripts/prepare-android.sh
+            ${{ env.PROJECT_ROOT }}/deyn-app/www/index.html
+            ${{ env.PROJECT_ROOT }}/deyn-app/scripts/prepare-android.sh
           if-no-files-found: error
           retention-days: 14
