@@ -169,22 +169,21 @@
     }).filter(x=>x.remaining>0);
   }
   function customerPayInfo(c, now) {
-    const day=Number(c&&c.payDay);
-    if(!Number.isInteger(day)||day<1||day>31) return null;
     const ts=Number.isFinite(Number(now))?Number(now):Date.now();
-    const open=ledger(c,ts).reduce((sum,x)=>sum+x.remaining,0);
-    if(open<=0) return null;
-    const d=new Date(ts);
-    const payDay=Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate());
-    if(d.getDate()===payDay) {
-      return {status:'today',diff:0,day,label:`اليوم موعد السداد المحدد (${day} في الشهر)`};
+    const open=ledger(c,ts).filter(x=>x.remaining>0&&validDate(x.dueAt));
+    if(!open.length) return null;
+    // Show the earliest outstanding due date: the most overdue debt wins;
+    // otherwise show the nearest upcoming fixed or monthly due date.
+    const dueAt=Math.min(...open.map(x=>Number(x.dueAt)));
+    const dueDate=new Date(dueAt), today=new Date(ts);
+    const diff=calendarDayDifference(ts,dueAt)*-1;
+    const day=dueDate.getDate();
+    if(diff>0) {
+      return {status:'overdue',diff,day,dueAt,label:`متأخر عن موعد السداد بـ ${diff} ${diff<=2?(diff===1?'يوم':'يومين'):'أيام'} (كان يوم ${day})`};
     }
-    if(d.getDate()<payDay) {
-      const diff=payDay-d.getDate();
-      return {status:diff<=5?'soon':'future',diff,day,label:diff<=5?`يقترب موعد السداد (بعد ${diff} ${diff<=2?(diff===1?'يوم':'يومين'):'أيام'})`:`موعد السداد يوم ${day} من الشهر`};
-    }
-    const overdue=d.getDate()-payDay;
-    return {status:'overdue',diff:overdue,day,label:`متأخر عن موعد السداد بـ ${overdue} ${overdue<=2?(overdue===1?'يوم':'يومين'):'أيام'} (كان يوم ${day})`};
+    if(diff===0) return {status:'today',diff:0,day,dueAt,label:`اليوم موعد السداد المحدد (${day} في الشهر)`};
+    const ahead=Math.abs(diff);
+    return {status:ahead<=5?'soon':'future',diff:ahead,day,dueAt,label:ahead<=5?`يقترب موعد السداد (بعد ${ahead} ${ahead<=2?(ahead===1?'يوم':'يومين'):'أيام'})`:`موعد السداد يوم ${day} من الشهر`};
   }
   function allocatePayment(c, amount) {
     let remaining=Math.max(0,Number(amount)||0); const allocations=[];
