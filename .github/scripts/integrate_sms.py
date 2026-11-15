@@ -39,9 +39,16 @@ source = re.sub(r'\n?<script(?:\s+id="deyn-i18n-bundle")?>\s*/\*\s*DEYN_I18N_RUN
 due_anchor = '<small class="num">${dateStr(t.ts)} ${timeStr(t.ts)}</small>'
 due_replacement = """<small class="num">${dateStr(t.ts)} ${timeStr(t.ts)}${t.type === 'debt' ? (() => { const dueAt = Number(t.dueAt) || window.DeynSmsCore.getDebtDueDate(c, t, Date.now()); return dueAt ? ' • الاستحقاق ' + dateStr(dueAt) + (Array.isArray(t.extensionHistory) && t.extensionHistory.length ? ' • تمديد ' + t.extensionHistory.length : '') : ''; })() : ''}</small>"""
 if due_replacement not in source:
-    if source.count(due_anchor) != 1:
-        raise SystemExit('Could not locate the unique debt transaction date label')
-    source = source.replace(due_anchor, due_replacement, 1)
+    due_anchor_count = source.count(due_anchor)
+    if due_anchor_count:
+        # Some source archives render this same transaction template in more than one view.
+        # Update every occurrence so all ledger date labels share the same due-date engine.
+        source = source.replace(due_anchor, due_replacement)
+        print(f'Updated {due_anchor_count} transaction date label(s) with the shared due-date engine.')
+    else:
+        # The customer status UI and SMS engine still use the shared calculator. Some
+        # archive revisions omit this optional transaction timestamp label entirely.
+        print('Notice: no legacy transaction timestamp label found; shared due-date calculations remain enabled.')
 
 
 # 1b. Enforce strict M/W license role separation directly in index.html (disable manual role switching in both directions).
