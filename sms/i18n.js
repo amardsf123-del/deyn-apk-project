@@ -738,7 +738,22 @@ const DEYN_I18N = (() => {
       const mStr = millions === 1 ? '1 million' : `${fmtC(millions)} millions`;
       if (rem === 0) return `${mStr} de centimes`;
       if (rem === 500000) return `${mStr} et demi de centimes`;
+      const remThousands = Math.floor(rem / 1000);
+      const remCentimes = rem % 1000;
+      if (remThousands > 0) {
+        const thousandPart = `${fmtC(remThousands)} mille`;
+        return remCentimes === 0
+          ? `${mStr} et ${thousandPart}`
+          : `${mStr} et ${thousandPart} et ${fmtC(remCentimes)} centimes`;
+      }
       return `${mStr} et ${fmtC(rem)} centimes`;
+    }
+    const thousands = Math.floor(centimes / 1000);
+    const remCentimes = centimes % 1000;
+    if (thousands >= 1) {
+      return remCentimes === 0
+        ? `${fmtC(thousands)} mille`
+        : `${fmtC(thousands)} mille et ${fmtC(remCentimes)} centimes`;
     }
     return `${fmtC(centimes)} centimes`;
   }
