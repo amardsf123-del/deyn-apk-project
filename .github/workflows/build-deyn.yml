@@ -93,6 +93,14 @@ jobs:
           grep -q 'DEYN_I18N_RUNTIME_V1' "$PROJECT_ROOT/deyn-app/www/index.html"
           echo "Integrated native plugin copies and SMS/i18n bundles verified."
 
+      - name: Run Android simulation regression tests
+        if: matrix.app == 'deyn-app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$PROJECT_ROOT/tests/android-sim/run.sh" || { echo "::error::tests/android-sim/run.sh is missing from PRO_4-fixed.zip"; exit 1; }
+          bash "$PROJECT_ROOT/tests/android-sim/run.sh" | tee android-sim-tests.log
+
       - name: Verify all integrated inline JavaScript syntax
         if: matrix.app == 'deyn-app'
         shell: bash
@@ -139,6 +147,33 @@ jobs:
           cd android
           ./gradlew --no-daemon assembleDebug
           find app/build/outputs/apk/debug -type f -name '*.apk' -print0 | xargs -0 sha256sum
+
+      - name: Verify exact French amount and Device ID code inside APK
+        if: matrix.app == 'deyn-app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find "$APP_DIR/android/app/build/outputs/apk/debug" -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
+          python3 - "$APK" <<'PY'
+          import sys, zipfile
+          apk=sys.argv[1]
+          with zipfile.ZipFile(apk) as z:
+              names=z.namelist()
+              target=next((n for n in names if n.endswith("assets/public/index.html")),None)
+              if not target:
+                  raise SystemExit("FAIL: assets/public/index.html not found in APK")
+              html=z.read(target).decode("utf-8",errors="replace")
+          checks={
+              "French million wording (' millions')": "' millions'" in html,
+              "Device ID migration function (deynLegacyIdBacksLicense)": "deynLegacyIdBacksLicense" in html,
+              "Old random fallback absent": "if(!id){var b=new Uint8Array(16)" not in html,
+          }
+          for label,ok in checks.items():
+              print(("PASS: " if ok else "FAIL: ")+label)
+          failed=[label for label,ok in checks.items() if not ok]
+          if failed: raise SystemExit("APK content verification failed: "+", ".join(failed))
+          PY
 
       - name: Upload integrated debug APK
         uses: actions/upload-artifact@v4
