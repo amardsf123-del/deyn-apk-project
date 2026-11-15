@@ -21,7 +21,7 @@ checks = {
     "synced ledger persistence schedules a refreshed SMS queue": "const originalPersist=persist;" in runtime and "smsScheduleSoon();return r;" in runtime,
     "immediate sends revalidate debt and payment state": "Core.validateBeforeSend(S,x,now).ok" in runtime,
     "payment regression tests cover full and partial settlement": "SMS payment regression" in (root / "sms/test.mjs").read_text(encoding="utf-8"),
-    "shared monthly due date is centralized in the SMS core": "function customerDueDate(c, now)" in engine and "function getDebtDueDate(c, debt, now)" in engine,
+    "shared monthly due date is centralized in the SMS core": "function customerDueDate(c, referenceDate)" in engine and "customerDueDate(c,validDate(d.ts)?Number(d.ts):now)" in engine and "function getDebtDueDate(c, debt, now)" in engine,
     "customer UI delegates status to the shared due-date core": "payInfo=function(c){ return Core.customerPayInfo(c,Date.now()); }" in runtime,
     "transaction ledger display uses shared due dates": "window.DeynSmsCore.getDebtDueDate(c, t, Date.now())" in (root / ".github/scripts/integrate_sms.py").read_text(encoding="utf-8"),
     "reminder timestamps honor local calendar dates and chosen offsets": "function reminderTimestamp(dueAt, daysAfter, hhmm)" in engine and "reminderTimestamp(x.dueAt,cfg.days[i],cfg.times[i])" in engine,
