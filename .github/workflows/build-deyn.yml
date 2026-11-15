@@ -87,8 +87,8 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re, subprocess, tempfile
-          html = Path("${{ env.PROJECT_ROOT }}/deyn-app/www/index.html").read_text(encoding="utf-8")
+          import os, re, subprocess, tempfile
+          html = (Path(os.environ["PROJECT_ROOT"]) / "deyn-app/www/index.html").read_text(encoding="utf-8")
           scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script\s*>', html, re.I)
           checked = 0
           with tempfile.TemporaryDirectory(prefix="deyn-js-") as td:
@@ -131,7 +131,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.app }}-sms-reliability-debug-apk
-          path: ${{ env.APP_DIR }}/android/app/build/outputs/apk/debug/*.apk
+          path: source/**/${{ matrix.app }}/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -143,7 +143,7 @@ jobs:
           path: |
             sms-engine-tests.log
             sms-static-checks.log
-            ${{ env.PROJECT_ROOT }}/deyn-app/www/index.html
-            ${{ env.PROJECT_ROOT }}/deyn-app/scripts/prepare-android.sh
+            source/**/deyn-app/www/index.html
+            source/**/deyn-app/scripts/prepare-android.sh
           if-no-files-found: error
           retention-days: 14
