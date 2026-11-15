@@ -1,4 +1,4 @@
-name: Build DEYN from PRO_4-fixed.zip only
+name: Build DEYN APKs with SMS delivery verification
 
 on:
   workflow_dispatch:
@@ -7,6 +7,12 @@ on:
     paths:
       - 'PRO_4-fixed.zip'
       - '.github/workflows/build-deyn.yml'
+      - '.github/scripts/integrate_sms.py'
+      - '.github/scripts/verify_sms_delivery.py'
+      - 'sms/**'
+      - 'DeynSmsPlugin.java'
+      - 'DeynBackupPlugin.java'
+      - 'DeynNotifPlugin.java'
 
 permissions:
   contents: read
@@ -22,26 +28,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify and extract ONLY the uploaded PRO_4-fixed.zip
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s PRO_4-fixed.zip || { echo "::error::PRO_4-fixed.zip is missing"; exit 1; }
-          echo "Input archive: PRO_4-fixed.zip"
-          sha256sum PRO_4-fixed.zip
-          mkdir -p source
-          unzip -q PRO_4-fixed.zip -d source
-          PROJECT_ROOT="$(find source -mindepth 1 -maxdepth 4 -type d -name PRO_4 -print -quit)"
-          if [ -z "$PROJECT_ROOT" ]; then
-            echo "::error::PRO_4 directory not found inside PRO_4-fixed.zip"
-            find source -maxdepth 5 -name package.json -print
-            exit 1
-          fi
-          test -s "$PROJECT_ROOT/${{ matrix.app }}/package.json" || { echo "::error::${{ matrix.app }}/package.json missing in uploaded archive"; exit 1; }
-          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
-          echo "Verified build source: $PROJECT_ROOT/${{ matrix.app }}"
-          find "$PROJECT_ROOT/${{ matrix.app }}" -maxdepth 2 -type f | sort | head -200
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -51,11 +37,86 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Build APK from uploaded archive source without overlays
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify and extract the current PRO_4-fixed.zip
         shell: bash
         run: |
           set -euo pipefail
-          APP_DIR="$PROJECT_ROOT/${{ matrix.app }}"
+          test -s PRO_4-fixed.zip || { echo "::error::PRO_4-fixed.zip is missing"; exit 1; }
+          echo "Input archive: PRO_4-fixed.zip"
+          sha256sum PRO_4-fixed.zip | tee source-archive.sha256
+          mkdir -p source
+          unzip -q PRO_4-fixed.zip -d source
+          PROJECT_ROOT="$(find source -mindepth 1 -maxdepth 4 -type d -name PRO_4 -print -quit)"
+          if [ -z "$PROJECT_ROOT" ]; then
+            echo "::error::PRO_4 directory not found inside PRO_4-fixed.zip"
+            find source -maxdepth 5 -name package.json -print
+            exit 1
+          fi
+          for app in deyn-app deyn-keygen; do
+            test -s "$PROJECT_ROOT/$app/package.json" || { echo "::error::$app/package.json missing in uploaded archive"; exit 1; }
+          done
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+          echo "Verified source root: $PROJECT_ROOT"
+
+      - name: Integrate current SMS engine and native plugins, then run regression tests
+        if: matrix.app == 'deyn-app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/integrate_sms.py .github/scripts/verify_sms_delivery.py
+          node --check sms/engine.js
+          node --check sms/runtime.js
+          node sms/test.mjs | tee sms-engine-tests.log
+          python3 .github/scripts/integrate_sms.py "$PROJECT_ROOT" sms/engine.js DeynSmsPlugin.java
+          python3 .github/scripts/verify_sms_delivery.py | tee sms-static-checks.log
+          cmp -s DeynSmsPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynSmsPlugin.java"
+          cmp -s DeynBackupPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynBackupPlugin.java"
+          cmp -s DeynNotifPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynNotifPlugin.java"
+          grep -q 'DEYN_SMS_ENGINE_V1' "$PROJECT_ROOT/deyn-app/www/index.html"
+          grep -q 'DEYN_I18N_RUNTIME_V1' "$PROJECT_ROOT/deyn-app/www/index.html"
+          echo "Integrated native plugin copies and SMS/i18n bundles verified."
+
+      - name: Verify all integrated inline JavaScript syntax
+        if: matrix.app == 'deyn-app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess, tempfile
+          html = Path("\${{ env.PROJECT_ROOT }}/deyn-app/www/index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script\s*>', html, re.I)
+          checked = 0
+          with tempfile.TemporaryDirectory(prefix="deyn-js-") as td:
+              for index, script in enumerate(scripts):
+                  if not script.strip():
+                      continue
+                  path = Path(td) / f"inline-{index}.js"
+                  path.write_text(script, encoding="utf-8")
+                  subprocess.run(["node", "--check", str(path)], check=True)
+                  checked += 1
+          if checked < 1:
+              raise SystemExit("No inline JavaScript blocks were checked")
+          print(f"JavaScript syntax OK: {checked} inline script blocks")
+          PY
+
+      - name: Select app directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_DIR="$PROJECT_ROOT/\${{ matrix.app }}"
+          test -s "$APP_DIR/package.json"
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+          echo "Building \${{ matrix.app }} from $APP_DIR"
+
+      - name: Build debug APK from integrated source
+        shell: bash
+        run: |
+          set -euo pipefail
           cd "$APP_DIR"
           npm install
           if [ -f scripts/fetch_fonts.py ]; then python3 scripts/fetch_fonts.py; fi
@@ -64,11 +125,25 @@ jobs:
           npx cap sync android
           cd android
           ./gradlew --no-daemon assembleDebug
+          find app/build/outputs/apk/debug -type f -name '*.apk' -print0 | xargs -0 sha256sum
 
-      - name: Upload APK built from PRO_4-fixed.zip
+      - name: Upload integrated debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.app }}-PRO_4-fixed-debug-apk
-          path: ${{ env.PROJECT_ROOT }}/${{ matrix.app }}/android/app/build/outputs/apk/debug/*.apk
+          name: \${{ matrix.app }}-sms-reliability-debug-apk
+          path: \${{ env.APP_DIR }}/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload SMS verification evidence
+        if: matrix.app == 'deyn-app'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deyn-sms-verification-evidence
+          path: |
+            sms-engine-tests.log
+            sms-static-checks.log
+            \${{ env.PROJECT_ROOT }}/deyn-app/www/index.html
+            \${{ env.PROJECT_ROOT }}/deyn-app/scripts/prepare-android.sh
           if-no-files-found: error
           retention-days: 14
