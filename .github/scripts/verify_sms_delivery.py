@@ -15,6 +15,12 @@ checks = {
     "worker waits past the former 20-second blind-success window": "STALE_INFLIGHT_MS + 15000L" in native,
     "confirmed failures remain retryable": "if (STATUS_FAILED.equals(finalStatus))" in native and "return Result.retry();" in native,
     "language and global helpers are exported": "resolveSmsLang,setGlobalEnabled" in engine,
+    "worker device is prevented from queuing SIM SMS": "if(isWorkerDevice()||!cfg().enabled)" in runtime,
+    "only confirmed total failures are automatically retried": "if (STATUS_FAILED.equals(finalStatus))" in native and "STATUS_DISPATCH_UNCERTAIN.equals(st)" in native,
+    "native worker validates the active queue payload before dispatch": "ACTIVE_PAYLOADS" in native and "dispatchOnce(context, id, phone, message, true, at, gap)" in native,
+    "synced ledger persistence schedules a refreshed SMS queue": "const originalPersist=persist;" in runtime and "smsScheduleSoon();return r;" in runtime,
+    "immediate sends revalidate debt and payment state": "Core.validateBeforeSend(S,x,now).ok" in runtime,
+    "payment regression tests cover full and partial settlement": "SMS payment regression" in (root / "sms/test.mjs").read_text(encoding="utf-8"),
 }
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
