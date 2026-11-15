@@ -12,6 +12,8 @@
   const isoDate=ts=>{if(!ts)return '';const d=new Date(ts);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
   const fromDate=s=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(String(s||'')))return null;const [y,m,d]=s.split('-').map(Number);const v=new Date(y,m-1,d,23,59,59,999).getTime();return Number.isFinite(v)?v:null;};
   let syncTimer=null, syncBusy=false;
+  // Replace the legacy UI-only pay-day calculation with the same due-date engine used by SMS.
+  payInfo=function(c){ return Core.customerPayInfo(c,Date.now()); };
 
   function smsSegmentSummary(text) {
     const info = Core.analyzeMessage ? Core.analyzeMessage(text) : { encoding: 'UCS-2', units: String(text||'').length, partsCount: Math.ceil(String(text||'').length / 67) || 1 };
@@ -72,8 +74,8 @@
       <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:10px">
         <b style="font-size:13px">جدول التذكير بعد الاستحقاق</b>
         <div class="sub">الأيام الافتراضية: 1 و4 و8 و15، ويمكن تغييرها.</div>
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">${c.days.map((d,i)=>`<label style="font-size:11px;color:var(--mute)">اليوم ${i+1}<input class="inp num" id="smsDay${i}" type="number" min="1" max="90" value="${d}" style="margin-top:4px;padding:8px 5px;height:40px;text-align:center"></label>`).join('')}</div>
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">${c.times.map((t,i)=>`<label style="font-size:11px;color:var(--mute)">الساعة ${i+1}<input class="inp num" id="smsTime${i}" type="time" value="${t}" style="margin-top:4px;padding:6px 2px;height:40px;text-align:center"></label>`).join('')}</div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">${c.days.map((d,i)=>`<label style="font-size:11px;color:var(--mute)">التذكير ${i+1} • بعد الاستحقاق<input class="inp num" id="smsDay${i}" type="number" min="1" max="90" value="${d}" style="margin-top:4px;padding:8px 5px;height:40px;text-align:center"></label>`).join('')}</div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">${c.times.map((t,i)=>`<label style="font-size:11px;color:var(--mute)">وقت التذكير ${i+1}<input class="inp num" id="smsTime${i}" type="time" min="09:00" max="${c.end}" value="${t}" style="margin-top:4px;padding:6px 2px;height:40px;text-align:center"></label>`).join('')}</div>
       </div>
       <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:12px">
         <b style="font-size:13px">فترة الإرسال والتوزيع</b>
@@ -128,6 +130,7 @@
     const start='09:00',end=lastById('smsEnd')?.value||'';
     const gap=Number(lastById('smsGap')?.value||5);
     if(days.some(x=>!Number.isInteger(x)||x<1||x>90)||new Set(days).size!==4||days.some((x,i)=>i>0&&x<=days[i-1])||times.some(x=>!/^([01]\d|2[0-3]):[0-5]\d$/.test(x))||!/^09:00$/.test(start)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(end)||end>'22:00'||end<='09:00'||!Number.isInteger(gap)||gap<1||gap>60)return toast('تحقق من الأيام والساعات والفاصل الزمني','err');
+    if(times.some(x=>x<'09:00'||x>end))return toast('يجب أن يكون وقت كل تذكير بين 09:00 ووقت نهاية الإرسال','err');
     c.days=days;c.times=times;c.start=start;c.end=end;c.intervalMinutes=gap;
     c.storeName=(lastById('smsStoreName')?.value||'').trim().slice(0,80);c.tplAr=lastById('smsTplAr')?.value.trim()||Core.DEFAULTS.tplAr;c.tplFr=lastById('smsTplFr')?.value.trim()||Core.DEFAULTS.tplFr;if(c.tplAr.length>500||c.tplFr.length>500)return toast('القالب طويل جدًا — الحد الأقصى 500 حرف لكل لغة','err');
     persist();smsScheduleSoon();closeModal();toast('تم حفظ إعدادات SMS بنجاح');
@@ -273,8 +276,8 @@
   openMoney=function(cid,kind){
     originalOpenMoney(cid,kind);
     const c=cust(cid),sheet=document.querySelector('#modalRoot .ovl:last-child .sheet');if(!c||!sheet)return;
-    if(kind==='debt'&&!sheet.querySelector('#mDueAt')){const label=document.createElement('div');const due=Core.nextMonthlyDue(Date.now(),c.payDay);label.innerHTML=`<label class="lbl" for="mDueAt">موعد استحقاق هذا الدين (اختياري)</label><input class="inp" id="mDueAt" type="date" value="${isoDate(due)}"><div class="sub">إذا تركته فارغًا فلن تُرسل تذكيرات تلقائية لهذا الدين حتى تحدد موعدًا. الزبائن ذوو يوم السداد الشهري يحصلون على الموعد التالي تلقائيًا.</div>`;sheet.querySelector('#mNote')?.before(label);}
-    if(kind==='pay'&&!sheet.querySelector('#mNewDueAt')){const due=Core.nextMonthlyDue(Date.now(),c.payDay);const box=document.createElement('div');box.innerHTML=`<label class="lbl">موعد استحقاق السلعة الجديدة (اختياري)</label><input class="inp" id="mNewDueAt" type="date" value="${isoDate(due)}">`;sheet.querySelector('#mNewDebt')?.after(box);}
+    if(kind==='debt'&&!sheet.querySelector('#mDueAt')){const label=document.createElement('div');const due=Core.customerDueDate(c,Date.now());label.innerHTML=`<label class="lbl" for="mDueAt">موعد استحقاق هذا الدين (اختياري)</label><input class="inp" id="mDueAt" type="date" data-auto-payday="${c.payDay&&due?'true':'false'}" value="${isoDate(due)}"><div class="sub">يُستخدم يوم السداد الشهري الحالي تلقائيًا. إذا غيّرت التاريخ يدويًا فسيُحفظ كتاريخ ثابت لهذا الدين.</div>`;sheet.querySelector('#mNote')?.before(label);}
+    if(kind==='pay'&&!sheet.querySelector('#mNewDueAt')){const due=Core.customerDueDate(c,Date.now());const box=document.createElement('div');box.innerHTML=`<label class="lbl">موعد استحقاق السلعة الجديدة (اختياري)</label><input class="inp" id="mNewDueAt" type="date" data-auto-payday="${c.payDay&&due?'true':'false'}" value="${isoDate(due)}">`;sheet.querySelector('#mNewDebt')?.after(box);}
     if(kind==='pay'&&!sheet.querySelector('#mExtendEnabled'))sheet.querySelector('#mNote')?.before(Object.assign(document.createElement('div'),{innerHTML:smsExtendHtml(c)}));
     if(typeof DEYN_I18N!=='undefined'&&typeof DEYN_I18N.translateRoot==='function')DEYN_I18N.translateRoot(sheet);
   };
@@ -294,9 +297,16 @@
       try{extension=Core.extendDebt(c,debtId,n,unit,Date.now());}catch(e){return toast(tr(e.message),'err');}
     }
     const oldAddTx=addTx;
+    const dueMetadata=(customer,fieldId)=>{
+      const field=lastById(fieldId),due=fromDate(field?.value);
+      if(!due)return {};
+      const expected=Core.customerDueDate(customer,Date.now());
+      const followsMonthlyPayDay=!!(customer.payDay&&field?.dataset.autoPayday==='true'&&expected&&isoDate(expected)===field.value);
+      return followsMonthlyPayDay?{dueDateMode:'monthly'}:{dueAt:due,dueDateMode:'fixed'};
+    };
     addTx=function(customer,type,amt,note,extra){
       if(type==='pay')return oldAddTx(customer,type,amt,note,Object.assign({},extra||{},{allocations:Core.allocatePayment(customer,amt)}));
-      if(type==='debt'){const due=fromDate(lastById(kind==='pay'?'mNewDueAt':'mDueAt')?.value);return oldAddTx(customer,type,amt,note,Object.assign({},extra||{},due?{dueAt:due}:{}));}
+      if(type==='debt'){const fieldId=kind==='pay'?'mNewDueAt':'mDueAt';return oldAddTx(customer,type,amt,note,Object.assign({},extra||{},dueMetadata(customer,fieldId)));}
       return oldAddTx(customer,type,amt,note,extra);
     };
     try{originalConfirmMoney();}finally{addTx=oldAddTx;}
@@ -311,6 +321,7 @@
   A.smsToggleArTpl=()=>{const w=lastById('smsTplArWrap');if(w)w.hidden=!w.hidden;};
   if(typeof READONLY_OK!=='undefined'&&READONLY_OK&&typeof READONLY_OK.add==='function'){READONLY_OK.add('smsHistory');}
   document.addEventListener('change',e=>{if(e.target&&e.target.id==='smsGlobal')smsToggleGlobal(e.target);});
+  document.addEventListener('change',e=>{if(e.target&&(e.target.id==='mDueAt'||e.target.id==='mNewDueAt'))e.target.dataset.autoPayday='false';});
   document.addEventListener('change',e=>{if(e.target&&e.target.id==='fSmsEnabled')e.target.dataset.userTouched='1';});
   document.addEventListener('input',e=>{
     if(e.target&&(e.target.id==='smsTplAr'||e.target.id==='smsTplFr'))updateTplCounters();

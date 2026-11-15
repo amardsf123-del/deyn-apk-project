@@ -228,3 +228,125 @@ assert.equal(C.validateBeforeSend(partiallyPaid, queuedBeforePayment, exactNow).
 assert.equal(C.validateBeforeSend(partiallyPaid, refreshedPartial, exactNow).ok, true,
   'the refreshed partial-balance reminder must pass send-time validation');
 console.log('SMS payment regression: full payment cancels reminders; partial payment refreshes amount and rejects stale payloads');
+
+
+// ============================================================================
+// Shared UI/SMS monthly due-date and merchant-defined reminder offsets
+// ============================================================================
+const localStamp=(y,m,d,h=0,min=0,sec=0,ms=0)=>new Date(y,m,d,h,min,sec,ms).getTime();
+const localParts=ts=>{const d=new Date(ts);return [d.getFullYear(),d.getMonth(),d.getDate(),d.getHours(),d.getMinutes()];};
+const nov14End=localStamp(2026,10,14,23,59,59,999);
+const nov15TestNow=localStamp(2026,10,15,12,23);
+const monthlyCustomer={
+  id:'monthly-ui-sms',name:'Monthly Test',phone:'0555123456',payDay:14,
+  tx:[{id:'monthly-debt',type:'debt',amount:500,ts:localStamp(2026,10,15,8,0)}]
+};
+const monthlyTxBefore=JSON.stringify(monthlyCustomer.tx);
+const monthlyLedger=C.ledger(monthlyCustomer,nov15TestNow);
+assert.equal(monthlyLedger.length,1);
+assert.equal(monthlyLedger[0].dueAt,nov14End,
+  'a debt entered after the monthly pay day must be due on the pay day that just passed, not next month');
+assert.deepEqual(localParts(monthlyLedger[0].dueAt),[2026,10,14,23,59]);
+assert.deepEqual(JSON.parse(JSON.stringify(C.customerPayInfo(monthlyCustomer,nov15TestNow))),{
+  status:'overdue',diff:1,day:14,dueAt:nov14End,
+  label:'متأخر عن موعد السداد بـ 1 يوم (كان يوم 14)'
+});
+assert.equal(JSON.stringify(monthlyCustomer.tx),monthlyTxBefore,
+  'deriving a monthly due date must never rewrite the historical transaction');
+
+const monthlyTestState={
+  settings:{sms:{enabled:true,days:[1,4,8,15],times:['12:20','13:10','16:00','10:00']}},
+  customers:[monthlyCustomer],smsLog:{}
+};
+const monthlyQueue=C.buildQueue(monthlyTestState,nov15TestNow,'ar');
+const firstMonthlyReminder=monthlyQueue.find(x=>x.step===1);
+assert.ok(firstMonthlyReminder,'the first configured reminder must be queued for a debt one day overdue');
+assert.equal(firstMonthlyReminder.dueAt,nov14End);
+assert.deepEqual(localParts(firstMonthlyReminder.reminderAt),[2026,10,15,12,20],
+  'the first reminder must use the configured day-1 and its exact local time');
+assert.equal(C.validateBeforeSend(monthlyTestState,firstMonthlyReminder,nov15TestNow).ok,true,
+  'the UI/SMS shared due date must pass send-time revalidation');
+console.log('Unified monthly due date: pay day 14 on Nov 15 is one day overdue and day-1 SMS is eligible at 12:20');
+
+const nov13TestNow=localStamp(2026,10,13,12,0);
+const beforeMonthlyDueState={
+  settings:{sms:{enabled:true,days:[1,4,8,15],times:['12:20','13:10','16:00','10:00']}},
+  customers:[{id:'before-due',name:'Before Due',phone:'0555123456',payDay:14,
+    tx:[{id:'before-debt',type:'debt',amount:100,ts:localStamp(2026,10,13,8,0)}]}],
+  smsLog:{}
+};
+const beforeInfo=C.customerPayInfo(beforeMonthlyDueState.customers[0],nov13TestNow);
+assert.equal(beforeInfo.status,'soon');
+assert.equal(beforeInfo.diff,1);
+assert.equal(beforeInfo.dueAt,nov14End);
+const beforeQueue=C.buildQueue(beforeMonthlyDueState,nov13TestNow,'ar');
+const scheduledFirst=beforeQueue.find(x=>x.step===1);
+assert.ok(scheduledFirst);
+assert.deepEqual(localParts(scheduledFirst.reminderAt),[2026,10,15,12,20]);
+assert.equal(C.validateBeforeSend(beforeMonthlyDueState,scheduledFirst,nov13TestNow).reason,'not-due',
+  'no reminder may be sent before the configured offset after the actual due date');
+console.log('Unified monthly due date: pay day 14 on Nov 13 remains upcoming and cannot send early');
+
+const customDays=[1,5,10,15];
+const customTimes=['10:05','11:15','16:10','20:00'];
+assert.deepEqual(JSON.parse(JSON.stringify(C.config({}).days)),[1,4,8,15]);
+assert.deepEqual(JSON.parse(JSON.stringify(C.config({days:customDays}).days)),customDays,
+  'the engine must preserve non-consecutive merchant-defined reminder days');
+assert.deepEqual(JSON.parse(JSON.stringify(C.config({days:[1,2,3,4]}).days)),[1,2,3,4]);
+assert.deepEqual(JSON.parse(JSON.stringify(C.config({days:[1,30,60,90]}).days)),[1,30,60,90]);
+for(let i=0;i<customDays.length;i++){
+  const due=nov14End;
+  const reminderAt=C.reminderTimestamp(due,customDays[i],customTimes[i]);
+  const runAt=reminderAt+60*1000;
+  const state={
+    settings:{sms:{enabled:true,days:customDays,times:customTimes}},
+    customers:[{id:'custom-offset-'+i,name:'Offset Test',phone:'0555123456',
+      tx:[{id:'offset-debt-'+i,type:'debt',amount:250,ts:localStamp(2026,9,1),dueAt:due}]}],
+    smsLog:{}
+  };
+  const queue=C.buildQueue(state,runAt,'ar');
+  const stage=queue.find(x=>x.step===i+1);
+  assert.ok(stage, 'reminder stage '+(i+1)+' must be queued on its independently configured day');
+  assert.equal(stage.reminderAt,reminderAt,'reminder stage '+(i+1)+' must preserve the exact chosen day and time');
+  assert.equal(C.validateBeforeSend(state,stage,runAt).ok,true,
+    'reminder stage '+(i+1)+' must pass send-time validation at its configured time');
+}
+console.log('Merchant reminder offsets: [1,5,10,15] and each associated time are honored independently');
+
+const monthEndNow=localStamp(2026,10,15,12,0);
+const febLeapNow=localStamp(2024,1,1,12,0);
+const febCommonNow=localStamp(2025,1,1,12,0);
+assert.equal(C.customerDueDate({payDay:31},monthEndNow),localStamp(2026,10,30,23,59,59,999),
+  'day 31 must clamp to the last day of November');
+assert.equal(C.customerDueDate({payDay:31},febLeapNow),localStamp(2024,1,29,23,59,59,999),
+  'day 31 must clamp to Feb 29 in a leap year');
+assert.equal(C.customerDueDate({payDay:31},febCommonNow),localStamp(2025,1,28,23,59,59,999),
+  'day 31 must clamp to Feb 28 in a common year');
+
+const monthlyModeDebt={id:'monthly-mode',type:'debt',amount:100,ts:localStamp(2026,10,1),dueDateMode:'monthly'};
+const monthlyModeCustomer={payDay:14,tx:[monthlyModeDebt]};
+const monthlyModeBefore=JSON.stringify(monthlyModeCustomer.tx);
+assert.equal(C.getDebtDueDate(monthlyModeCustomer,monthlyModeDebt,nov15TestNow),nov14End);
+assert.equal(C.getDebtDueDate(monthlyModeCustomer,monthlyModeDebt,localStamp(2026,11,1)),localStamp(2026,11,14,23,59,59,999),
+  'an unmodified monthly-mode debt follows the next monthly cycle without rewriting its transaction');
+assert.equal(JSON.stringify(monthlyModeCustomer.tx),monthlyModeBefore);
+
+const fixedDue=localStamp(2026,11,3,23,59,59,999);
+const originalFixedDue=localStamp(2026,10,14,23,59,59,999);
+const fixedDueDebt={id:'fixed-date',type:'debt',amount:100,ts:localStamp(2026,9,1),dueAt:fixedDue,originalDueAt:originalFixedDue};
+const fixedDueCustomer={payDay:14,tx:[fixedDueDebt]};
+const fixedBefore=JSON.stringify(fixedDueCustomer.tx);
+assert.equal(C.getDebtDueDate(fixedDueCustomer,fixedDueDebt,nov15TestNow),fixedDue,
+  'a stored dueAt remains authoritative even when the customer has a monthly pay day');
+assert.equal(C.getDebtDueDate({payDay:14,tx:[]},{originalDueAt:originalFixedDue},nov15TestNow),originalFixedDue,
+  'a legacy originalDueAt remains authoritative if no dueAt exists');
+const fixedQueueState={settings:{sms:{enabled:true,days:[1,5,10,15],times:['10:00','11:00','16:00','20:00']}},customers:[fixedDueCustomer],smsLog:{}};
+C.buildQueue(fixedQueueState,nov15TestNow);
+fixedQueueState.settings.sms.times=['11:30','12:30','17:00','19:00'];
+fixedQueueState.settings.sms.days=[2,6,11,20];
+C.buildQueue(fixedQueueState,nov15TestNow);
+assert.equal(C.getDebtDueDate(fixedDueCustomer,fixedDueDebt,nov15TestNow),fixedDue,
+  'changing reminder days or times must never mutate a fixed due date');
+assert.equal(JSON.stringify(fixedDueCustomer.tx),fixedBefore,
+  'queue generation and reminder-setting changes must not rewrite existing fixed debt dates');
+console.log('Calendar edge cases: 31st, leap February, fixed historical dates and monthly recurrence are preserved');

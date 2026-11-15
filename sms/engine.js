@@ -103,13 +103,50 @@
     return c;
   }
   function nextMonthlyDue(ts, day) {
-    if (!day || day<1 || day>31) return null;
-    const d=new Date(ts), y=d.getFullYear(), m=d.getMonth();
-    let due=new Date(y,m,Math.min(day,new Date(y,m+1,0).getDate()),23,59,59,999).getTime();
-    if (due < ts) { const nm=m+1; due=new Date(y,nm,Math.min(day,new Date(y,nm+1,0).getDate()),23,59,59,999).getTime(); }
+    const n=Number(day);
+    if (!Number.isInteger(n) || n<1 || n>31 || !validDate(ts)) return null;
+    const d=new Date(Number(ts)), y=d.getFullYear(), m=d.getMonth();
+    let due=new Date(y,m,Math.min(n,new Date(y,m+1,0).getDate()),23,59,59,999).getTime();
+    if (due < Number(ts)) { const nm=m+1; due=new Date(y,nm,Math.min(n,new Date(y,nm+1,0).getDate()),23,59,59,999).getTime(); }
     return due;
   }
-  function ledger(c) {
+  // The merchant's pay day is a calendar-day rule for the current monthly cycle.
+  // It is deliberately independent of the timestamp when a debt transaction was created.
+  function customerDueDate(c, now) {
+    const day=Number(c&&c.payDay);
+    if(!Number.isInteger(day)||day<1||day>31) return null;
+    const ts=Number.isFinite(Number(now))?Number(now):Date.now();
+    const current=new Date(ts);
+    const year=current.getFullYear(), month=current.getMonth();
+    const lastDay=new Date(year,month+1,0).getDate();
+    return new Date(year,month,Math.min(day,lastDay),23,59,59,999).getTime();
+  }
+  // Fixed per-debt dates always win. Only debts without a stored date (or explicitly
+  // marked as following the customer's monthly pay day) use the shared monthly rule.
+  function getDebtDueDate(c, debt, now) {
+    const d=debt||{};
+    if(validDate(d.dueAt)) return Number(d.dueAt);
+    if(validDate(d.originalDueAt)) return Number(d.originalDueAt);
+    if(d.dueDateMode==='monthly' || c&&c.payDay) return customerDueDate(c,now);
+    return null;
+  }
+  function calendarDayDifference(fromTs, toTs) {
+    if(!validDate(fromTs)||!Number.isFinite(Number(toTs))) return 0;
+    const from=new Date(Number(fromTs)), to=new Date(Number(toTs));
+    const a=Date.UTC(from.getFullYear(),from.getMonth(),from.getDate());
+    const b=Date.UTC(to.getFullYear(),to.getMonth(),to.getDate());
+    return Math.round((b-a)/DAY);
+  }
+  function reminderTimestamp(dueAt, daysAfter, hhmm) {
+    if(!validDate(dueAt)||!Number.isInteger(Number(daysAfter))||Number(daysAfter)<1) return null;
+    const match=parseTime(hhmm);
+    if(!match) return null;
+    const d=new Date(Number(dueAt));
+    d.setDate(d.getDate()+Number(daysAfter));
+    d.setHours(match[0],match[1],0,0);
+    return d.getTime();
+  }
+  function ledger(c, now) {
     const debts=(c.tx||[]).filter(t=>t.type==='debt').slice().sort((a,b)=>(a.ts-b.ts)||String(a.id).localeCompare(String(b.id)));
     const left=new Map(debts.map(d=>[d.id,Number(d.amount)||0]));
     const pays=(c.tx||[]).filter(t=>t.type==='pay').slice().sort((a,b)=>(a.ts-b.ts)||String(a.id).localeCompare(String(b.id)));
@@ -126,9 +163,27 @@
       }
     }
     return debts.map(d=>{
-      const original=validDate(d.originalDueAt)?Number(d.originalDueAt):(validDate(d.dueAt)?Number(d.dueAt):(c.payDay?nextMonthlyDue(Number(d.ts)||Date.now(),Number(c.payDay)):null));
-      return { debt:d, remaining:Math.max(0,Math.round((left.get(d.id)||0)*100)/100), dueAt:validDate(d.dueAt)?Number(d.dueAt):original, originalDueAt:original };
+      const dueAt=getDebtDueDate(c,d,now);
+      const original=validDate(d.originalDueAt)?Number(d.originalDueAt):(validDate(d.dueAt)?Number(d.dueAt):dueAt);
+      return { debt:d, remaining:Math.max(0,Math.round((left.get(d.id)||0)*100)/100), dueAt, originalDueAt:original };
     }).filter(x=>x.remaining>0);
+  }
+  function customerPayInfo(c, now) {
+    const ts=Number.isFinite(Number(now))?Number(now):Date.now();
+    const open=ledger(c,ts).filter(x=>x.remaining>0&&validDate(x.dueAt));
+    if(!open.length) return null;
+    // Show the earliest outstanding due date: the most overdue debt wins;
+    // otherwise show the nearest upcoming fixed or monthly due date.
+    const dueAt=Math.min(...open.map(x=>Number(x.dueAt)));
+    const dueDate=new Date(dueAt), today=new Date(ts);
+    const diff=calendarDayDifference(ts,dueAt)*-1;
+    const day=dueDate.getDate();
+    if(diff>0) {
+      return {status:'overdue',diff,day,dueAt,label:`متأخر عن موعد السداد بـ ${diff} ${diff<=2?(diff===1?'يوم':'يومين'):'أيام'} (كان يوم ${day})`};
+    }
+    if(diff===0) return {status:'today',diff:0,day,dueAt,label:`اليوم موعد السداد المحدد (${day} في الشهر)`};
+    const ahead=Math.abs(diff);
+    return {status:ahead<=5?'soon':'future',diff:ahead,day,dueAt,label:ahead<=5?`يقترب موعد السداد (بعد ${ahead} ${ahead<=2?(ahead===1?'يوم':'يومين'):'أيام'})`:`موعد السداد يوم ${day} من الشهر`};
   }
   function allocatePayment(c, amount) {
     let remaining=Math.max(0,Number(amount)||0); const allocations=[];
@@ -254,18 +309,17 @@
       if(c.smsEnabled===false || c.smsOptOut===true || !phone(c.phone)) continue;
       const lang=resolveSmsLang(c.smsLang, appLanguage || (S.settings && (S.settings.language || S.settings.lang)) || 'ar');
       const title=c.honorific==='madame'?(lang==='fr'?'Madame':'السيدة'):c.honorific==='monsieur'?(lang==='fr'?'Monsieur':'السيد'):'';
-      const items=ledger(c);
+      const items=ledger(c,now);
       const events=[];
       for(const x of items) {
         if(!x.dueAt) continue;
-        const dueDate=new Date(x.dueAt), nowDate=new Date(now);
-        const overdueDays=Math.max(0,Math.floor((Date.UTC(nowDate.getFullYear(),nowDate.getMonth(),nowDate.getDate())-Date.UTC(dueDate.getFullYear(),dueDate.getMonth(),dueDate.getDate()))/DAY));
+        const overdueDays=Math.max(0,calendarDayDifference(x.dueAt,now));
         let latestPast=-1;
         // Select by the actual configured local reminder timestamp, not elapsed 24-hour blocks.
         // A due date stored at 23:59 must still trigger at 14:15 the following calendar day.
         for(let i=0;i<cfg.days.length;i++) if(localAt(x.dueAt+cfg.days[i]*DAY,cfg.times[i])<=now) latestPast=i;
         for(let i=0;i<cfg.days.length;i++) {
-          const reminderAt=localAt(x.dueAt+cfg.days[i]*DAY,cfg.times[i]);
+          const reminderAt=reminderTimestamp(x.dueAt,cfg.days[i],cfg.times[i]);
           const key=`${c.id}|${x.debt.id}|${i+1}|${Math.floor(x.dueAt)}`;
           if(S.smsLog&&isLogBlocking(S.smsLog[key])) continue;
           if(reminderAt<=now && i!==latestPast) continue; // one catch-up reminder only; never flood old backlog
@@ -315,9 +369,9 @@
     const c=(S.customers||[]).find(x=>x.id===item.cid); if(!c) return {ok:false,reason:'customer-missing'};
     if(c.smsEnabled===false||c.smsOptOut===true) return {ok:false,reason:'customer-disabled'};
     const to=phone(c.phone); if(!to||to!==item.phone) return {ok:false,reason:'phone-changed'};
-    const open=ledger(c).filter(x=>item.debtIds.includes(x.debt.id)); if(!open.length) return {ok:false,reason:'debt-settled'};
+    const open=ledger(c,now).filter(x=>item.debtIds.includes(x.debt.id)); if(!open.length) return {ok:false,reason:'debt-settled'};
     const byId=new Map(open.map(x=>[x.debt.id,x]));
-    const dueEvents=(item.events||[]).filter(ev=>{const x=byId.get(ev.debtId);return x&&x.dueAt===ev.dueAt&&now>=localAt(ev.dueAt+cfg.days[ev.step-1]*DAY,cfg.times[ev.step-1])&&!(S.smsLog&&isLogBlocking(S.smsLog[ev.key]));});
+    const dueEvents=(item.events||[]).filter(ev=>{const x=byId.get(ev.debtId);return x&&x.dueAt===ev.dueAt&&now>=reminderTimestamp(ev.dueAt,cfg.days[ev.step-1],cfg.times[ev.step-1])&&!(S.smsLog&&isLogBlocking(S.smsLog[ev.key]));});
     const dueIds=new Set(dueEvents.map(x=>x.debtId));const due=open.filter(x=>dueIds.has(x.debt.id));
     if(!due.length) return {ok:false,reason:'not-due'};
     if(S.smsLog&&isLogBlocking(S.smsLog[item.key])) return {ok:false,reason:'duplicate'};
@@ -325,5 +379,5 @@
     if(Number.isFinite(Number(item.amount))&&Math.abs(amount-Number(item.amount))>0.01)return {ok:false,reason:'amount-changed'};
     return {ok:true,customer:c,items:due,amount};
   }
-  root.DeynSmsCore={DEFAULTS,config,ledger,allocatePayment,extendDebt,buildQueue,validateBeforeSend,phone,nextMonthlyDue,dateLabel,testMessage,normalizeSmsText,analyzeMessage,reconcileStatus,isLogBlocking,resolveSmsLang,setGlobalEnabled};
+  root.DeynSmsCore={DEFAULTS,config,ledger,allocatePayment,extendDebt,buildQueue,validateBeforeSend,phone,nextMonthlyDue,customerDueDate,getDebtDueDate,customerPayInfo,reminderTimestamp,dateLabel,testMessage,normalizeSmsText,analyzeMessage,reconcileStatus,isLogBlocking,resolveSmsLang,setGlobalEnabled};
 })(typeof window!=='undefined'?window:globalThis);

@@ -2,10 +2,23 @@ name: Build DEYN APKs with SMS delivery verification
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'PRO_4-fixed.zip'
+      - 'deyn (3).html'
+      - '.github/workflows/build-deyn.yml'
+      - '.github/scripts/integrate_sms.py'
+      - '.github/scripts/verify_sms_delivery.py'
+      - 'sms/**'
+      - 'DeynSmsPlugin.java'
+      - 'DeynBackupPlugin.java'
+      - 'DeynNotifPlugin.java'
   push:
     branches: [main]
     paths:
       - 'PRO_4-fixed.zip'
+      - 'deyn (3).html'
       - '.github/workflows/build-deyn.yml'
       - '.github/scripts/integrate_sms.py'
       - '.github/scripts/verify_sms_delivery.py'
