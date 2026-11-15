@@ -327,8 +327,10 @@ const monthlyModeDebt={id:'monthly-mode',type:'debt',amount:100,ts:localStamp(20
 const monthlyModeCustomer={payDay:14,tx:[monthlyModeDebt]};
 const monthlyModeBefore=JSON.stringify(monthlyModeCustomer.tx);
 assert.equal(C.getDebtDueDate(monthlyModeCustomer,monthlyModeDebt,nov15TestNow),nov14End);
-assert.equal(C.getDebtDueDate(monthlyModeCustomer,monthlyModeDebt,localStamp(2026,11,1)),localStamp(2026,11,14,23,59,59,999),
-  'an unmodified monthly-mode debt follows the next monthly cycle without rewriting its transaction');
+assert.equal(C.getDebtDueDate(monthlyModeCustomer,monthlyModeDebt,localStamp(2026,11,1)),nov14End,
+  'an unmodified monthly-mode debt keeps the due date anchored to the transaction month, even after the calendar month changes');
+assert.equal(C.ledger(monthlyModeCustomer,localStamp(2026,11,1))[0].dueAt,nov14End,
+  'reopening the app in a later month must not silently move the existing debt due date');
 assert.equal(JSON.stringify(monthlyModeCustomer.tx),monthlyModeBefore);
 
 const fixedDue=localStamp(2026,11,3,23,59,59,999);
