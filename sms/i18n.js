@@ -468,7 +468,17 @@ const DEYN_FR_DICT = {
   "كلمة المرور الجديدة * ({} أحرف أو أرقام على الأقل)": "Nouveau mot de passe * (au moins {} caractères)",
   "كلمة المرور الجديدة يجب أن تتكون من {} أحرف أو أرقام على الأقل": "Le nouveau mot de passe doit comporter au moins {} caractères",
   "كلمة المرور الحالية *": "Mot de passe actuel *",
-  "كلمة المرور الرئيسية": "Mot de passe principal",
+    "كلمة المرور الشخصية": "Mot de passe personnel",
+  "تغيير كلمة مرور قفل التطبيق أو استعادتها بكلمة سر المصنع": "Modifier le mot de passe de verrouillage ou le réinitialiser avec le mot de passe usine",
+  "هذه كلمة مرور شخصية لقفل التطبيق فقط، ولا تمنح أو تغيّر أي صلاحيات.": "Ce mot de passe sert uniquement à verrouiller l’application et ne modifie aucun droit.",
+  "أنشئ كلمة مرورك الشخصية لتفعيل قفل التطبيق": "Créez votre mot de passe personnel pour activer le verrouillage de l’application",
+  "استعادة كلمة المرور الشخصية": "Récupérer le mot de passe personnel",
+  "أدخل كلمة سر المصنع لإعادة تعيين كلمة المرور الشخصية المنسية. هذه العملية لا تغيّر الترخيص أو دور الجهاز أو صلاحياته أو بياناتك.": "Saisissez le mot de passe usine pour réinitialiser le mot de passe personnel oublié. Cette opération ne modifie ni la licence, ni le rôle de l’appareil, ni les autorisations, ni vos données.",
+  "كلمة سر المصنع *": "Mot de passe usine *",
+  "كلمة سر المصنع": "Mot de passe usine",
+  "كلمة سر المصنع غير صحيحة ❌": "Mot de passe usine incorrect ❌",
+  "تم التحقق من كلمة سر المصنع. عيّن كلمة مرور شخصية جديدة.": "Mot de passe usine vérifié. Définissez un nouveau mot de passe personnel.",
+"كلمة المرور الرئيسية": "Mot de passe principal",
   "كلمة المرور تحمي وضع المالك وقفل التطبيق. لا توجد كلمة مرور افتراضية ولا يمكن لأحد تجاوزها.": "Le mot de passe protège le mode propriétaire et le verrouillage de l'application. Il n'existe aucun mot de passe par défaut et personne ne peut le contourner.",
   "كلمة المرور غير صحيحة ❌": "Mot de passe incorrect ❌",
   "كمال بوعزيز": "Kamel Bouaziz",
@@ -717,30 +727,27 @@ const DEYN_I18N = (() => {
   const norm = s => s.replace(/\s+/g, ' ').trim();
 
   /**
-   * Formats a Dinar amount (1 DA = 100 centimes) in natural Algerian French centimes phrasing.
-   * Examples:
-   *   5 DA     -> "500 centimes"
-   *   10 DA    -> "1 000 centimes"
-   *   345 DA   -> "34 500 centimes"
-   *   10000 DA -> "1 million de centimes"
-   *   15000 DA -> "1 million et demi de centimes"
-   *   14250 DA -> "1 million et 425 000 centimes"
+   * Algerian French shorthand used by the app: numbers + mille/million(s), never "centimes".
+   * Examples: 200 DA -> "20 mille"; 500 DA -> "50 mille";
+   * 2 000 DA -> "200 mille"; 10 000 DA -> "1 million";
+   * 15 000 DA -> "1,5 million"; 25 000 DA -> "2,5 millions".
    */
   function dialectFr(d) {
     const num = Math.round((Number(d) + Number.EPSILON) * 100) / 100;
     if (!(num > 0)) return '';
     const centimes = Math.round(num * 100);
     if (centimes <= 0) return '';
-    const fmtC = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
-    const millions = Math.floor(centimes / 1000000);
-    const rem = centimes % 1000000;
-    if (millions >= 1) {
-      const mStr = millions === 1 ? '1 million' : `${fmtC(millions)} millions`;
-      if (rem === 0) return `${mStr} de centimes`;
-      if (rem === 500000) return `${mStr} et demi de centimes`;
-      return `${mStr} et ${fmtC(rem)} centimes`;
+    const fmt = n => {
+      const fixed = (Math.round(n * 1000) / 1000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+      const parts = fixed.split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+      return parts.length > 1 ? parts[0] + ',' + parts[1] : parts[0];
+    };
+    if (centimes >= 1000000) {
+      const millions = centimes / 1000000;
+      return `${fmt(millions)} ${millions < 2 ? 'million' : 'millions'}`;
     }
-    return `${fmtC(centimes)} centimes`;
+    return `${fmt(centimes / 1000)} mille`;
   }
 
   /**

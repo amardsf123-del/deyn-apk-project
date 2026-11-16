@@ -9,6 +9,7 @@ on:
       - 'deyn (3).html'
       - '.github/workflows/build-deyn.yml'
       - '.github/scripts/integrate_sms.py'
+      - '.github/scripts/integrate_password_security.py'
       - '.github/scripts/verify_sms_delivery.py'
       - 'sms/**'
       - 'DeynSmsPlugin.java'
@@ -21,6 +22,7 @@ on:
       - 'deyn (3).html'
       - '.github/workflows/build-deyn.yml'
       - '.github/scripts/integrate_sms.py'
+      - '.github/scripts/integrate_password_security.py'
       - '.github/scripts/verify_sms_delivery.py'
       - 'sms/**'
       - 'DeynSmsPlugin.java'
@@ -80,11 +82,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile .github/scripts/integrate_sms.py .github/scripts/verify_sms_delivery.py
+          python3 -m py_compile .github/scripts/integrate_sms.py .github/scripts/verify_sms_delivery.py .github/scripts/integrate_password_security.py
           node --check sms/engine.js
           node --check sms/runtime.js
           node sms/test.mjs | tee sms-engine-tests.log
           python3 .github/scripts/integrate_sms.py "$PROJECT_ROOT" sms/engine.js DeynSmsPlugin.java
+          python3 .github/scripts/integrate_password_security.py "$PROJECT_ROOT/deyn-app/www/index.html"
           python3 .github/scripts/verify_sms_delivery.py | tee sms-static-checks.log
           cmp -s DeynSmsPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynSmsPlugin.java"
           cmp -s DeynBackupPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynBackupPlugin.java"
