@@ -1,0 +1,90 @@
+--- a/source/deyn-app/www/index.html
++++ b/source/deyn-app/www/index.html
+@@ -3384,6 +3384,7 @@
+   syncUnpair: d => syUnpair(d.id),
+   openRecovery: () => openRecoveryModal(),
+   recoverySubmit: () => submitRecovery(),
++  factoryRecoverySubmit: () => submitFactoryRecovery(),
+   copyDevId: async () => { const ok = await agCopyText(String(DEYN_DEV_ID || '')); toast(ok ? 'تم نسخ معرّف الجهاز 📋' : 'تعذّر النسخ — اضغط مطولاً على المعرّف', ok ? 'ok' : 'err'); },
+   pwSetSubmit: () => submitSetPassword(),
+   ownerSwitchSubmit: () => submitSwitchToOwner(),
+@@ -3489,7 +3490,7 @@
+   wipe: () => { if (!requireOwner('مسح كل البيانات')) return; confirmBox({ title: 'مسح كل البيانات', msg: 'سيتم حذف كل الزبائن والتذاكر والسجلات. لا يمكن التراجع.', ok: 'مسح الكل', danger: true, onOk: () => { S.customers = []; S.pending = []; S.seq = 1; persist(); stack.slice().forEach(m => closeModal(m)); renderAll(); toast('تم مسح البيانات'); } }); }
+ };
+ // READ_ONLY (clock policy): only viewing / exporting / password / navigation actions stay available. Default deny, so new actions are blocked automatically.
+-const READONLY_OK = new Set(['home','notifs','openNotifCust','settings','closeTop','go','open','seg','fseg','setStatsFilter','exportPdf','backup','copyStmt','wa','copyMasterCode','copyAssistantCode','copyDevId','mode','unlockApp','forgotPassPrompt','openRecovery','recoverySubmit','pwSetSubmit','pwLater','verifyMasterPass','openTrash','syncOpen','tap','k','undo','useLog']);
++const READONLY_OK = new Set(['home','notifs','openNotifCust','settings','closeTop','go','open','seg','fseg','setStatsFilter','exportPdf','backup','copyStmt','wa','copyMasterCode','copyAssistantCode','copyDevId','mode','unlockApp','forgotPassPrompt','openRecovery','recoverySubmit','factoryRecoverySubmit','pwSetSubmit','pwLater','verifyMasterPass','openTrash','syncOpen','tap','k','undo','useLog']);
+ Object.keys(A).forEach(k => { if (READONLY_OK.has(k)) return; const f = A[k]; A[k] = function () { if (typeof deynReadOnly === 'function' && deynReadOnly()) { toast('وضع القراءة فقط: لا يمكن الإضافة أو التعديل أو الحذف حاليًا 🔒', 'err'); return; } return f.apply(this, arguments); }; });
+ document.addEventListener('click', e => {
+   const t = e.target.closest('[data-act]'); if (!t || t.disabled) return;
+@@ -3561,11 +3562,12 @@
+ 
+ 
+ /* ============ Owner password (PBKDF2-SHA256 + per-password salt) & App Lock ============
+-   - No factory / master password exists. Nothing in the app can bypass the owner password.
++   - The factory key is accepted ONLY in the password-recovery screen to reset the owner's personal password.
++   - It is never accepted for daily login and never changes licence, device role, permissions or business data.
+    - The old plaintext S.auth.masterPass is migrated to a salted PBKDF2 hash on first run, then deleted.
+-   - Users who never changed the old built-in default are asked to set a new password (they keep full data access meanwhile).
+-   - Forgotten password: signed, device-bound, one-time Ed25519 recovery code (see deynVerifyRecovery). */
++   - Forgotten password: factory-key reset or signed, device-bound, one-time Ed25519 recovery code. */
+ const PW_ITER = 310000, PW_MIN_LEN = 8;
++const FACTORY_RECOVERY_SHA256 = 'd3b8c687b5010a58aadc07d27ea2bbafb2671f1b903f81e61d4bd7f5258ccd26';
+ // SHA-256 of the retired built-in default. Used ONLY to detect "never changed" during migration; it is not an accepted credential.
+ const LEGACY_DEFAULT_SHA256 = '4e3d2ff3ce5293dd81b161e13868d9b27d6b7b05a3b46fffdb1523c451f4ad94';
+ let PW_CTX = {}, PW_BUSY = false;
+@@ -3682,6 +3684,7 @@
+   PW_BUSY = true;
+   try {
+     const ctx = PW_CTX || {};
++    if (ctx.viaRecovery && isWorkerDevice()) return toast('استعادة كلمة مرور المالك متاحة على جهاز صاحب المحل فقط', 'err');
+     if (!ctx.viaRecovery && isWorkerDevice()) return requireOwner('إدارة كلمة المرور');
+     if (ctx.hasPw) {
+       const r = await authVerify(cur ? cur.value : '');
+@@ -3738,15 +3741,46 @@
+ }
+ function openRecoveryModal() {
+   const rm = openModal(() => `${sheetHead('استرجاع كلمة المرور')}
+-    <div class="sub">أرسل معرّف هذا الجهاز إلى الدعم الفني ليصدر لك كود استرداد موقّع. الكود صالح لهذا الجهاز فقط ولمرة واحدة، ولا يغيّر ترخيصك ولا دورك ولا بياناتك.</div>
++    <div class="sub">يمكنك استعادة كلمة المرور الشخصية بمفتاح المصنع، أو باستخدام كود استرداد موقّع ومخصص لهذا الجهاز. الاسترداد يغيّر كلمة المرور فقط ولا يغيّر الترخيص أو دور الجهاز أو الصلاحيات أو البيانات.</div>
++    <label class="lbl" for="factoryRecoveryKey">مفتاح استعادة كلمة المرور</label>
++    <input class="inp" id="factoryRecoveryKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" style="direction:ltr;text-align:left" placeholder="أدخل مفتاح المصنع">
++    <button class="btn pri block" data-act="factoryRecoverySubmit" style="margin-top:10px">استعادة وتعيين كلمة مرور جديدة</button>
++    <div class="sub" style="text-align:center;margin:16px 0 8px">أو استخدم كود الاسترداد الموقّع</div>
+     <label class="lbl">معرّف الجهاز</label>
+     <div class="num" style="direction:ltr;word-break:break-all;overflow-wrap:anywhere;font-size:13px;background:#f1f5f9;border-radius:10px;padding:10px;user-select:all">${esc(String(DEYN_DEV_ID || ''))}</div>
+     <button type="button" class="btn sm" data-act="copyDevId" style="margin-top:8px">نسخ المعرّف</button>
+     <label class="lbl" for="recCode" style="margin-top:12px">كود الاسترداد *</label>
+     <input class="inp" id="recCode" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" style="direction:ltr;text-align:left" placeholder="DEYNR1-...">
+-    <button class="btn pri block" data-act="recoverySubmit" data-primary style="margin-top:16px">تحقق وتعيين كلمة مرور جديدة</button>`);
++    <button class="btn block" data-act="recoverySubmit" style="margin-top:10px">التحقق من كود الاسترداد</button>`);
+   rm.wrap.style.zIndex = '100001'; // must sit above the lock overlay (z-index 99999) it is opened from
+ }
++async function submitFactoryRecovery() {
++  if (PW_BUSY) return;
++  const inp = lastById('factoryRecoveryKey');
++  if (!inp) return;
++  PW_BUSY = true;
++  try {
++    if (isWorkerDevice()) return toast('استعادة كلمة مرور المالك متاحة على جهاز صاحب المحل فقط', 'err');
++    if (!S.auth) S.auth = {};
++    const f = S.auth.factoryRecoveryFail || { n: 0, until: 0 };
++    if (f.until > Date.now()) return toast(`محاولات كثيرة خاطئة. انتظر ${Math.ceil((f.until-Date.now())/1000)} ثانية`, 'err');
++    const digest = await pwSha256Hex(String(inp.value || '').trim());
++    if (digest !== FACTORY_RECOVERY_SHA256) {
++      f.n = (f.n || 0) + 1;
++      if (f.n >= 5) f.until = Date.now() + Math.min(600, 30 * (f.n - 4)) * 1000;
++      S.auth.factoryRecoveryFail = f; persist();
++      return toast('مفتاح الاستعادة غير صحيح', 'err');
++    }
++    delete S.auth.factoryRecoveryFail;
++    delete S.auth.pw; delete S.auth.masterPass; delete S.auth.pwFail;
++    S.auth.pwMustSet = true;
++    if (!persist()) return toast('تعذّر حفظ حالة الاستعادة بأمان', 'err');
++    const ov = $('#appLockOverlay'); if (ov) ov.style.display = 'none';
++    stack.slice().forEach(m => closeModal(m));
++    setTimeout(() => openSetPasswordModal(true, true), 250);
++    toast('تم التحقق من مفتاح المصنع. عيّن كلمة مرور شخصية جديدة');
++  } finally { PW_BUSY = false; }
++}
+ async function submitRecovery() {
