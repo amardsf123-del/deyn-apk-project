@@ -213,19 +213,48 @@ new_check = '''function checkAppLock() {
 replace_once(old_check, new_check, "lock state consistency")
 
 # Prevent the home screen from flashing before the optional lock appears.
-# Match the actual source layout instead of depending on one exact multiline snippet.
+# In the real PRO_4 source, S.seq and the first render may share one physical line.
 seq_pos = source.find("S.seq = S.seq ||")
 if seq_pos < 0:
     raise SystemExit("app initialization: S.seq anchor not found")
-render_match = re.search(r"(?m)^([ \\t]*)buildTiles\\(\\);[ \\t]*renderAll\\(\\);", source[seq_pos:seq_pos + 1800])
-if not render_match:
-    raise SystemExit("app initialization: first home render anchor not found after S.seq")
-render_start = seq_pos + render_match.start()
-indent = render_match.group(1)
-lock_line = indent + "{ const ov = $('#appLockOverlay'); if (ov && S.settings && S.settings.appLockEnabled && S.auth && S.auth.pw) ov.style.display = 'flex'; }\\n"
-source = source[:render_start] + lock_line + source[render_start:]
-# Remove the old late overlay reveal if the source still contains it.
-source = re.sub(r"(?m)^([ \\t]*)\\{[ \\t]*const ov = \\$('#appLockOverlay'\\);[ \\t]*if \\(ov && S\\.settings\\.appLockEnabled\\) ov\\.style\\.display = 'flex';[ \\t]*\\}[ \\t]*\\n?", "", source)
+
+pre_render_marker = "// DEYN_APP_LOCK_PRE_RENDER_V1"
+if pre_render_marker not in source:
+    render_match = re.search(r"\bbuildTiles\(\);\s*renderAll\(\);", source[seq_pos:seq_pos + 4000])
+    if not render_match:
+        raise SystemExit("app initialization: first buildTiles/renderAll pair not found after S.seq")
+
+    render_start = seq_pos + render_match.start()
+    line_start = source.rfind("\n", 0, render_start) + 1
+    indent_match = re.match(r"[ \t]*", source[line_start:render_start])
+    indent = indent_match.group(0) if indent_match else ""
+    # Split the original one-line initialization immediately before its first populated render.
+    prefix = source[:render_start].rstrip(" \t")
+    lock_block = (
+        "\n" + indent + pre_render_marker + "\n"
+        + indent + "{ const ov = $('#appLockOverlay'); if (ov && S.settings && S.settings.appLockEnabled) ov.style.display = 'flex'; }\n"
+        + indent
+    )
+    source = prefix + lock_block + source[render_start:]
+
+# Remove the former late reveal, which ran only after buildTiles()/renderAll().
+source = re.sub(
+    r"(?m)^[ \t]*\{[ \t]*const ov = \$('#appLockOverlay'\);[ \t]*if \(ov && S\.settings\.appLockEnabled\) ov\.style\.display = 'flex';[ \t]*\}[ \t]*\n?",
+    "",
+    source
+)
+
+# Fail closed if the early overlay is not uniquely positioned before the first render.
+if source.count(pre_render_marker) != 1:
+    raise SystemExit("app initialization: pre-render app-lock marker is missing or duplicated")
+verify_seq = source.find("S.seq = S.seq ||")
+verify_marker = source.find(pre_render_marker, verify_seq)
+verify_build = source.find("buildTiles();", verify_seq)
+verify_render = source.find("renderAll();", verify_build)
+if not (verify_seq >= 0 and verify_seq < verify_marker < verify_build < verify_render):
+    raise SystemExit("app initialization: app-lock overlay is not before the first home render")
+if "if (ov && S.settings.appLockEnabled) ov.style.display = 'flex';" in source:
+    raise SystemExit("app initialization: a late app-lock overlay reveal remains")
 
 
 if 'ensurePasswordSet();' in source or 'a.pwMustSet = true' in source or 'pwMustSet: true' in source:
