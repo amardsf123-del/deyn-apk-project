@@ -1,4 +1,4 @@
-name: Inspect DEYN source archive
+name: Inspect DEYN source archives
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/inspect-deyn.yml'
       - 'deyn-apk-project.zip'
+      - 'PRO_4-fixed.zip'
       - 'sms-feature.zip'
       - 'sms-feature.patch'
   workflow_dispatch:
@@ -19,50 +20,56 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extract project and SMS package
+      - name: Extract current project archives and SMS package
         shell: bash
         run: |
           set -euo pipefail
           test -s deyn-apk-project.zip
+          test -s PRO_4-fixed.zip
           test -s sms-feature.zip
-          mkdir -p source sms-feature
+          mkdir -p source pro-fixed sms-feature
           unzip -q deyn-apk-project.zip -d source
+          unzip -q PRO_4-fixed.zip -d pro-fixed
           unzip -q sms-feature.zip -d sms-feature
           {
-            echo "PROJECT ARCHIVE CONTENTS"
-            find source -maxdepth 6 -type f | sort
+            echo "PROJECT ARCHIVE (deyn-apk-project.zip)"
+            find source -maxdepth 7 -type f | sort
+            echo
+            echo "PRO FIXED ARCHIVE (PRO_4-fixed.zip)"
+            find pro-fixed -maxdepth 7 -type f | sort
             echo
             echo "SMS PACKAGE CONTENTS"
             find sms-feature -maxdepth 6 -type f | sort
             echo
             echo "PACKAGE FILES"
-            find source sms-feature -name package.json -type f -print
+            find source pro-fixed sms-feature -name package.json -type f -print
             echo
             echo "ANDROID / BUILD FILES"
-            find source sms-feature \( -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'AndroidManifest.xml' -o -name 'capacitor.config.*' -o -name 'MainActivity.java' \) -type f -print
+            find source pro-fixed sms-feature \\( -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'AndroidManifest.xml' -o -name 'capacitor.config.*' -o -name 'MainActivity.java' \\) -type f -print
             echo
             echo "SMS INTEGRATION MARKERS"
-            grep -RniE 'smsRemind|SMS_DEFAULT_TPL|smsSyncSchedule|smsConsentOk|smsTest|smsTpl|DeynSmsPlugin' source sms-feature --exclude-dir=node_modules --exclude='*.lock' || true
+            grep -RniE 'smsRemind|SMS_DEFAULT_TPL|smsSyncSchedule|smsConsentOk|smsTest|smsTpl|DeynSmsPlugin' source pro-fixed sms-feature --exclude-dir=node_modules --exclude='*.lock' || true
           } > inspection.txt
           cat inspection.txt
       - name: Block accidental secret exposure
         shell: bash
         run: |
           set -euo pipefail
-          if find source sms-feature -type f \( -name '*.pem' -o -name '*.key' -o -name '.env' -o -name '.env.*' \) | grep -q .; then
+          if find source pro-fixed sms-feature -type f \\( -name '*.pem' -o -name '*.key' -o -name '.env' -o -name '.env.*' \\) | grep -q .; then
             echo "Blocked: sensitive key or environment file found in extracted archive."
             exit 1
           fi
-          if grep -RIlE --binary-files=without-match '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{30,}|AIza[0-9A-Za-z_-]{30,}' source sms-feature; then
+          if grep -RIlE --binary-files=without-match '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{30,}|AIza[0-9A-Za-z_-]{30,}' source pro-fixed sms-feature; then
             echo "Blocked: possible secret detected. No artifact uploaded."
             exit 1
           fi
-      - name: Upload extracted source for review
+      - name: Upload extracted source archives for review
         uses: actions/upload-artifact@v4
         with:
-          name: deyn-source-inspection
+          name: deyn-source-archives-inspection
           path: |
             source/
+            pro-fixed/
             sms-feature/
             sms-feature.patch
             DeynSmsPlugin.java
@@ -70,4 +77,4 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-# Inspection only. No source files are changed and no APK is built.
+# Inspection only. No app source is changed and no APK is built.
