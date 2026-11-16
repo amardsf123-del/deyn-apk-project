@@ -1,2 +1,4 @@
 Temporary trigger for DEYN PRO 4 debug APK build.
 Source archives are PRO_4-fixed.zip and deyn-apk-project.zip on sms-integration-files.
+
+Splash guard build trigger 2026-11-16.
