@@ -6,6 +6,8 @@ on:
     branches: [sms-integration-files]
     paths:
       - '.github/workflows/build-deyn.yml'
+      - 'factory-recovery.patch'
+      - 'splash-lock.patch'
       - 'PRO_4-fixed.zip'
       - 'deyn-apk-project.zip'
       - '.github/build-now.txt'
@@ -69,6 +71,35 @@ jobs:
                   p = Path(tempfile.gettempdir()) / f'deyn-{i}.js'
                   p.write_text(script, encoding='utf-8')
                   subprocess.run(['node', '--check', str(p)], check=True)
+          # Regression guards for the two reported password/startup defects.
+          import hashlib
+          expected_factory_hash = 'd3b8c687b5010a58aadc07d27ea2bbafb2671f1b903f81e61d4bd7f5258ccd26'
+          assert hashlib.sha256(b'TAYBEIAOMAR').hexdigest() == expected_factory_hash
+          assert f"FACTORY_RECOVERY_SHA256 = '{expected_factory_hash}'" in html
+          assert 'factoryRecoverySubmit: () => submitFactoryRecovery()' in html
+          assert "'factoryRecoverySubmit'" in html
+          assert 'if (isWorkerDevice()) return toast(' in html
+          assert 'S.auth.pwMustSet = true;' in html
+          assert '<body class="booting">' in html
+          assert '<div class="shell" id="appShell" hidden>' in html
+          assert 'body.booting .shell{visibility:hidden!important}' in html
+          init_at = html.index('async function init()')
+          order = [
+              html.index('const changed = await authMigrate();', init_at),
+              html.index('checkAppLock();', init_at),
+              html.index('ensurePasswordSet();', init_at),
+              html.index('shell.hidden = false;', init_at),
+              html.index("document.body.classList.remove('booting');", init_at),
+          ]
+          assert order == sorted(order), 'App shell is revealed before the lock check.'
+          factory_at = html.index('async function submitFactoryRecovery()')
+          recovery_at = html.index('async function submitRecovery()', factory_at)
+          factory_code = html[factory_at:recovery_at]
+          assert 'delete S.auth.pw;' in factory_code
+          assert 'S.auth.pwMustSet = true;' in factory_code
+          assert 'S.auth.licRole' not in factory_code
+          assert 'S.settings' not in factory_code
+          print('Factory recovery and startup-lock regression checks passed.')
           print(f'Validated {len(scripts)} inline JavaScript blocks.')
           PY
           node pro4/PRO_4/sms/test.mjs | tee sms-unit-tests.log
