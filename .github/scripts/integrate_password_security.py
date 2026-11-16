@@ -213,14 +213,20 @@ new_check = '''function checkAppLock() {
 replace_once(old_check, new_check, "lock state consistency")
 
 # Prevent the home screen from flashing before the optional lock appears.
-# The state has already been loaded here; raise the overlay before the first render.
-replace_once("""  S.seq = S.seq || (Math.max(0, ...S.pending.map(t => t.no)) + 1);
-  buildTiles(); renderAll(); if (!persist()) return; checkSmartNotifs();
-  { const ov = $('#appLockOverlay'); if (ov && S.settings.appLockEnabled) ov.style.display = 'flex'; }""",
-"""  S.seq = S.seq || (Math.max(0, ...S.pending.map(t => t.no)) + 1);
-  { const ov = $('#appLockOverlay'); if (ov && S.settings.appLockEnabled && S.auth && S.auth.pw) ov.style.display = 'flex'; }
-  buildTiles(); renderAll(); if (!persist()) return; checkSmartNotifs();""",
-"show app lock before first home render");
+# Match the actual source layout instead of depending on one exact multiline snippet.
+seq_pos = source.find("S.seq = S.seq ||")
+if seq_pos < 0:
+    raise SystemExit("app initialization: S.seq anchor not found")
+render_match = re.search(r"(?m)^([ \\t]*)buildTiles\\(\\);[ \\t]*renderAll\\(\\);", source[seq_pos:seq_pos + 1800])
+if not render_match:
+    raise SystemExit("app initialization: first home render anchor not found after S.seq")
+render_start = seq_pos + render_match.start()
+indent = render_match.group(1)
+lock_line = indent + "{ const ov = $('#appLockOverlay'); if (ov && S.settings && S.settings.appLockEnabled && S.auth && S.auth.pw) ov.style.display = 'flex'; }\\n"
+source = source[:render_start] + lock_line + source[render_start:]
+# Remove the old late overlay reveal if the source still contains it.
+source = re.sub(r"(?m)^([ \\t]*)\\{[ \\t]*const ov = \\$('#appLockOverlay'\\);[ \\t]*if \\(ov && S\\.settings\\.appLockEnabled\\) ov\\.style\\.display = 'flex';[ \\t]*\\}[ \\t]*\\n?", "", source)
+
 
 if 'ensurePasswordSet();' in source or 'a.pwMustSet = true' in source or 'pwMustSet: true' in source:
     raise SystemExit("verification failed: a mandatory first-run password path remains")
