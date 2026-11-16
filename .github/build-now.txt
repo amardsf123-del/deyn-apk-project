@@ -1,1 +1,2 @@
-Temporary trigger for the existing DEYN debug APK build workflow. This does not change app source.
+Temporary trigger for DEYN PRO 4 debug APK build.
+Source archives are PRO_4-fixed.zip and deyn-apk-project.zip on sms-integration-files.
