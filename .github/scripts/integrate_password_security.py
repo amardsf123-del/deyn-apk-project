@@ -34,6 +34,7 @@ new_settings = '''    \${S.auth && S.auth.pw ? \`
       <button type="button" class="btn sm" data-act="resetPassModal" style="height:34px;font-size:12px;padding:0 14px;background:#f0fdf4;color:var(--em);border:1.5px solid var(--em);font-weight:700;border-radius:10px">إدارة كلمة المرور</button>
     </div>
     \` : ''}'''
+new_settings = new_settings.replace(chr(92) + '${', '${').replace(chr(92) + chr(96), chr(96))
 replace_once(old_settings, new_settings, "optional password settings row")
 
 old_toggle = '''  if (k === 'appLockEnabled') {
@@ -194,6 +195,7 @@ async function submitRecovery() {
 
 
 '''
+factory_block = factory_block.replace(chr(92) + '${', '${').replace(chr(92) + chr(96), chr(96))
 source = source[:recovery_start] + factory_block + source[recovery_end:]
 
 old_check = '''function checkAppLock() {
