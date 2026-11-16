@@ -47,7 +47,7 @@
  function checkAppLock() {
    const overlay = $('#appLockOverlay');
    if (!overlay) return;
-@@ -4048,10 +4053,15 @@
+@@ -4048,10 +4053,25 @@
    S.seq = S.seq || (Math.max(0, ...S.pending.map(t => t.no)) + 1);
    buildTiles(); renderAll(); if (!persist()) return; await deynFlush(); if (storageBlocked) return; checkSmartNotifs();
    { const ov = $('#appLockOverlay'); if (ov && S.settings.appLockEnabled) ov.style.display = 'flex'; }
@@ -73,3 +73,4 @@
  }
  if (typeof document !== 'undefined' && document.getElementById('coins')) licenseBoot(init);
  </script>
+ 
