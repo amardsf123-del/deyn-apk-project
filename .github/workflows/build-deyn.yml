@@ -3,14 +3,19 @@ name: Build DEYN APKs
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [sms-integration-files]
     paths:
+      - '.github/workflows/build-deyn.yml'
+      - 'PRO_4-fixed.zip'
       - 'deyn-apk-project.zip'
-      - '.github/build-now.txt'
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -24,20 +29,56 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - name: Extract project archive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Extract the exact uploaded PRO 4 source and app archive
+        shell: bash
         run: |
-          test -f deyn-apk-project.zip
+          set -euo pipefail
+          test -s PRO_4-fixed.zip
+          test -s deyn-apk-project.zip
+          mkdir -p pro4 source
+          unzip -q PRO_4-fixed.zip -d pro4
           unzip -q deyn-apk-project.zip -d source
+          test -s pro4/PRO_4/.github/scripts/integrate_sms.py
+          test -s pro4/PRO_4/sms/engine.js
+          test -s pro4/PRO_4/DeynSmsPlugin.java
+          test -s source/deyn-app/www/index.html
+          test -s source/deyn-keygen/www/index.html
+          echo "PRO_4-fixed.zip SHA256:"
+          sha256sum PRO_4-fixed.zip
+          echo "deyn-apk-project.zip SHA256:"
+          sha256sum deyn-apk-project.zip
+      - name: Integrate PRO 4 SMS, French localization, backup and clock completion
+        if: matrix.app == 'deyn-app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 pro4/PRO_4/.github/scripts/integrate_sms.py source pro4/PRO_4/sms/engine.js pro4/PRO_4/DeynSmsPlugin.java
+          node --check source/deyn-app/www/index.html
+          node pro4/PRO_4/sms/test.mjs | tee sms-unit-tests.log
+          node source/trusted-time/test.mjs | tee trusted-time-tests.log
+          node source/sync/test_engine.mjs | tee sync-engine-tests.log
+          node source/sync/test_session.mjs | tee sync-session-tests.log
+          (cd pro4/PRO_4/tests/android-sim && bash run.sh) | tee native-sms-simulation.log
       - name: Build APK
         working-directory: source/${{ matrix.app }}
+        shell: bash
         run: |
+          set -euo pipefail
           npm install
           python3 scripts/fetch_fonts.py
           npx cap add android
           bash scripts/prepare-android.sh
           npx cap sync android
+          if [ "${{ matrix.app }}" = "deyn-app" ]; then
+            for P in DeynVaultPlugin.java DeynSyncPlugin.java DeynSmsPlugin.java DeynBackupPlugin.java DeynNotifPlugin.java; do
+              test -s "android/app/src/main/java/com/deyn/app/$P"
+            done
+          fi
           cd android
-          ./gradlew assembleDebug
+          ./gradlew --no-daemon assembleDebug
       - name: Upload debug APK for testing only
         uses: actions/upload-artifact@v4
         with:
