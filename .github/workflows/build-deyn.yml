@@ -82,7 +82,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile .github/scripts/integrate_sms.py .github/scripts/verify_sms_delivery.py
+          python3 -m py_compile .github/scripts/integrate_sms.py .github/scripts/verify_sms_delivery.py .github/scripts/integrate_password_security.py
           node --check sms/engine.js
           node --check sms/runtime.js
           node sms/test.mjs | tee sms-engine-tests.log
