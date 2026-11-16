@@ -1,15 +1,18 @@
 --- a/source/deyn-app/www/index.html
 +++ b/source/deyn-app/www/index.html
-@@ -20,6 +20,8 @@
+@@ -19,8 +19,10 @@
+ *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
  [hidden]{display:none!important}
  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:'Alexandria',sans-serif;-webkit-font-smoothing:antialiased}
  body.lock{overflow:hidden}
-+/* Keep the merchant interface hidden until stored settings and password protection are resolved. */
++/* The app shell is revealed only after the licence, data and lock checks finish. */
 +body.booting .shell{visibility:hidden!important}
  button,input,select,textarea{font-family:inherit;color:inherit}
  button{cursor:pointer;border:0;background:none;padding:0}
  button:disabled{cursor:not-allowed;opacity:.45}
-@@ -488,7 +490,7 @@
+ :focus-visible{outline:2px solid var(--sea);outline-offset:2px}
+@@ -487,9 +489,9 @@
+ .code-card__body,.code-card__value{min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word}
  #modalRoot,.ovl,.sheet{min-width:0;max-width:100%}
  </style>
  </head>
@@ -18,7 +21,34 @@
  <!-- ===== شاشة التفعيل + قفل الساعة (تُظهر نفسها فقط عند الحاجة) ===== -->
  <div id="actGate" role="dialog" aria-modal="true" aria-label="تفعيل DEYN">
    <button type="button" id="agLang" style="position:absolute;top:calc(10px + env(safe-area-inset-top));left:12px;z-index:20;background:#fff;border:1.5px solid #065043;color:#065043;border-radius:10px;padding:6px 12px;font:700 12px sans-serif;cursor:pointer">Français</button>
-@@ -4083,8 +4085,16 @@
+   <div class="ag-top">
+@@ -561,9 +563,9 @@
+   <div class="cl-ic"><svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M5 5l1.5 1.5"/></svg></div>
+   <p>تم رصد إرجاع وقت الهاتف. يرجى ضبط الساعة الحقيقية لمتابعة العمل.</p>
+ </div>
+ <div id="agToast" role="status" aria-live="polite"></div>
+-<div class="shell">
++<div class="shell" id="appShell" hidden>
+   <header class="hdr">
+     <div class="hdr-row">
+       <button class="sq" id="notifBellBtn" data-act="notifs" aria-label="التنبيهات" style="position:relative">
+         <svg width="24" height="24" viewBox="0 0 24 24" fill="#34d399" style="display:block">
+@@ -3629,9 +3631,12 @@
+   return { ok: false, wait: pwThrottleLeft() };
+ }
+ const pwFailMsg = r => r.wait ? `محاولات كثيرة خاطئة. انتظر ${r.wait} ثانية ⏳` : 'كلمة المرور غير صحيحة ❌';
+ function ensurePasswordSet() {
+-  if (S && S.auth && S.auth.pwMustSet && !S.auth.pw && !isWorkerDevice() && !stack.length) setTimeout(() => openSetPasswordModal(true, false), 450);
++  if (!(S && S.auth && S.auth.pwMustSet && !S.auth.pw && !isWorkerDevice() && !stack.length)) return;
++  const open = () => { if (!stack.length) openSetPasswordModal(true, false); };
++  if (S.settings && S.settings.appLockEnabled) open();
++  else setTimeout(open, 450);
+ }
+ function checkAppLock() {
+   const overlay = $('#appLockOverlay');
+   if (!overlay) return;
+@@ -4048,10 +4053,15 @@
+   S.seq = S.seq || (Math.max(0, ...S.pending.map(t => t.no)) + 1);
    buildTiles(); renderAll(); if (!persist()) return; await deynFlush(); if (storageBlocked) return; checkSmartNotifs();
    { const ov = $('#appLockOverlay'); if (ov && S.settings.appLockEnabled) ov.style.display = 'flex'; }
    syInit();
@@ -29,9 +59,15 @@
 +    if (changed && !persist()) return;
 +    checkAppLock();
 +    ensurePasswordSet();
++    const shell = document.getElementById('appShell');
++    if (shell) shell.hidden = false;
 +    document.body.classList.remove('booting');
 +  } catch (e) {
++    // Reveal only after the lock state has been applied.
 +    checkAppLock();
++    ensurePasswordSet();
++    const shell = document.getElementById('appShell');
++    if (shell) shell.hidden = false;
 +    document.body.classList.remove('booting');
 +  }
  }
