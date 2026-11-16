@@ -745,7 +745,7 @@ const DEYN_I18N = (() => {
     };
     if (centimes >= 1000000) {
       const millions = centimes / 1000000;
-      return `${fmt(millions)} ${millions === 1 ? 'million' : 'millions'}`;
+      return `${fmt(millions)} ${millions < 2 ? 'million' : 'millions'}`;
     }
     return `${fmt(centimes / 1000)} mille`;
   }
