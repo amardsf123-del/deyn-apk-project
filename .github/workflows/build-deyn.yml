@@ -8,6 +8,7 @@ on:
       - '.github/workflows/build-deyn.yml'
       - 'PRO_4-fixed.zip'
       - 'deyn-apk-project.zip'
+      - '.github/build-now.txt'
 
 permissions:
   contents: read
