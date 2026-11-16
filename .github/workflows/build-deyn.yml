@@ -58,6 +58,7 @@ jobs:
           set -euo pipefail
           python3 pro4/PRO_4/.github/scripts/integrate_sms.py source pro4/PRO_4/sms/engine.js pro4/PRO_4/DeynSmsPlugin.java
           patch --batch --forward -p1 < factory-recovery.patch
+          patch --batch --forward -p1 < splash-lock.patch
           python3 - <<'PY'
           from pathlib import Path
           import re, subprocess, tempfile
