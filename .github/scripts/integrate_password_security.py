@@ -212,8 +212,8 @@ new_check = '''function checkAppLock() {
   if (S && S.settings && S.settings.appLockEnabled && S.auth && S.auth.pw) {'''
 replace_once(old_check, new_check, "lock state consistency")
 
-/* Prevent the home screen from flashing before the optional lock appears.
-   The state has already been loaded here; raise the overlay before the first render. */
+# Prevent the home screen from flashing before the optional lock appears.
+# The state has already been loaded here; raise the overlay before the first render.
 replace_once("""  S.seq = S.seq || (Math.max(0, ...S.pending.map(t => t.no)) + 1);
   buildTiles(); renderAll(); if (!persist()) return; checkSmartNotifs();
   { const ov = $('#appLockOverlay'); if (ov && S.settings.appLockEnabled) ov.style.display = 'flex'; }""",
