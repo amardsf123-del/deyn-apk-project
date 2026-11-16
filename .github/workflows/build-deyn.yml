@@ -56,7 +56,18 @@ jobs:
         run: |
           set -euo pipefail
           python3 pro4/PRO_4/.github/scripts/integrate_sms.py source pro4/PRO_4/sms/engine.js pro4/PRO_4/DeynSmsPlugin.java
-          node --check source/deyn-app/www/index.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess, tempfile
+          html = Path('source/deyn-app/www/index.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script\s*>', html, re.I)
+          for i, script in enumerate(scripts):
+              if script.strip():
+                  p = Path(tempfile.gettempdir()) / f'deyn-{i}.js'
+                  p.write_text(script, encoding='utf-8')
+                  subprocess.run(['node', '--check', str(p)], check=True)
+          print(f'Validated {len(scripts)} inline JavaScript blocks.')
+          PY
           node pro4/PRO_4/sms/test.mjs | tee sms-unit-tests.log
           node source/trusted-time/test.mjs | tee trusted-time-tests.log
           node source/sync/test_engine.mjs | tee sync-engine-tests.log
