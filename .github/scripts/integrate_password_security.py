@@ -212,6 +212,16 @@ new_check = '''function checkAppLock() {
   if (S && S.settings && S.settings.appLockEnabled && S.auth && S.auth.pw) {'''
 replace_once(old_check, new_check, "lock state consistency")
 
+/* Prevent the home screen from flashing before the optional lock appears.
+   The state has already been loaded here; raise the overlay before the first render. */
+replace_once("""  S.seq = S.seq || (Math.max(0, ...S.pending.map(t => t.no)) + 1);
+  buildTiles(); renderAll(); if (!persist()) return; checkSmartNotifs();
+  { const ov = $('#appLockOverlay'); if (ov && S.settings.appLockEnabled) ov.style.display = 'flex'; }""",
+"""  S.seq = S.seq || (Math.max(0, ...S.pending.map(t => t.no)) + 1);
+  { const ov = $('#appLockOverlay'); if (ov && S.settings.appLockEnabled && S.auth && S.auth.pw) ov.style.display = 'flex'; }
+  buildTiles(); renderAll(); if (!persist()) return; checkSmartNotifs();""",
+"show app lock before first home render");
+
 if 'ensurePasswordSet();' in source or 'a.pwMustSet = true' in source or 'pwMustSet: true' in source:
     raise SystemExit("verification failed: a mandatory first-run password path remains")
 if 'DEYNR1-' in source or 'id="recCode"' in source or 'id="factoryPass"' not in source:
