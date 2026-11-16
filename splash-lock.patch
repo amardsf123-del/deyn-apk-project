@@ -1,0 +1,39 @@
+--- a/source/deyn-app/www/index.html
++++ b/source/deyn-app/www/index.html
+@@ -20,6 +20,8 @@
+ [hidden]{display:none!important}
+ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:'Alexandria',sans-serif;-webkit-font-smoothing:antialiased}
+ body.lock{overflow:hidden}
++/* Keep the merchant interface hidden until stored settings and password protection are resolved. */
++body.booting .shell{visibility:hidden!important}
+ button,input,select,textarea{font-family:inherit;color:inherit}
+ button{cursor:pointer;border:0;background:none;padding:0}
+ button:disabled{cursor:not-allowed;opacity:.45}
+@@ -488,7 +490,7 @@
+ #modalRoot,.ovl,.sheet{min-width:0;max-width:100%}
+ </style>
+ </head>
+-<body>
++<body class="booting">
+ <!-- ===== شاشة التفعيل + قفل الساعة (تُظهر نفسها فقط عند الحاجة) ===== -->
+ <div id="actGate" role="dialog" aria-modal="true" aria-label="تفعيل DEYN">
+   <button type="button" id="agLang" style="position:absolute;top:calc(10px + env(safe-area-inset-top));left:12px;z-index:20;background:#fff;border:1.5px solid #065043;color:#065043;border-radius:10px;padding:6px 12px;font:700 12px sans-serif;cursor:pointer">Français</button>
+@@ -4083,8 +4085,16 @@
+   buildTiles(); renderAll(); if (!persist()) return; await deynFlush(); if (storageBlocked) return; checkSmartNotifs();
+   { const ov = $('#appLockOverlay'); if (ov && S.settings.appLockEnabled) ov.style.display = 'flex'; }
+   syInit();
+-  authMigrate().then(changed => { if (changed && !persist()) return; checkAppLock(); ensurePasswordSet(); })
+-    .catch(() => { checkAppLock(); });
++  try {
++    const changed = await authMigrate();
++    if (changed && !persist()) return;
++    checkAppLock();
++    ensurePasswordSet();
++    document.body.classList.remove('booting');
++  } catch (e) {
++    checkAppLock();
++    document.body.classList.remove('booting');
++  }
+ }
+ if (typeof document !== 'undefined' && document.getElementById('coins')) licenseBoot(init);
+ </script>
