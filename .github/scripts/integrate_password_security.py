@@ -238,10 +238,10 @@ if pre_render_marker not in source:
     source = prefix + lock_block + source[render_start:]
 
 # Remove the former late reveal, which ran only after buildTiles()/renderAll().
-source = re.sub(
-    r"(?m)^[ \t]*\{[ \t]*const ov = \$('#appLockOverlay'\);[ \t]*if \(ov && S\.settings\.appLockEnabled\) ov\.style\.display = 'flex';[ \t]*\}[ \t]*\n?",
-    "",
-    source
+late_reveal = "{ const ov = $('#appLockOverlay'); if (ov && S.settings.appLockEnabled) ov.style.display = 'flex'; }"
+source = ''.join(
+    line for line in source.splitlines(keepends=True)
+    if line.strip() != late_reveal
 )
 
 # Fail closed if the early overlay is not uniquely positioned before the first render.
