@@ -1,0 +1,15 @@
+name = "deyn-cloud-sync"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[durable_objects.bindings]]
+name = "MERCHANT_SYNC"
+class_name = "MerchantSyncDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MerchantSyncDO"]
+
+[vars]
+MAX_BATCH_BYTES = "262144"
+MAX_CLOCK_SKEW_SEC = "300"

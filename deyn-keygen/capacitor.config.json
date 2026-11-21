@@ -1,0 +1,8 @@
+{
+  "appId": "com.deyn.keygen",
+  "appName": "DEYN Keygen",
+  "webDir": "www",
+  "backgroundColor": "#065043",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}

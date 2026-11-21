@@ -1,0 +1,22 @@
+{
+  "name": "deyn-keygen",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DEYN Keygen",
+  "scripts": {
+    "fonts": "python3 scripts/fetch_fonts.py",
+    "android:add": "npx cap add android && bash scripts/prepare-android.sh && npx cap sync android",
+    "android:sync": "bash scripts/prepare-android.sh && npx cap sync android",
+    "android:apk": "cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/clipboard": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/device": "^7.0.0",
+    "capacitor-secure-storage-plugin": "^0.11.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  }
+}

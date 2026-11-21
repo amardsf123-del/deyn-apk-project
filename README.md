@@ -1,15 +1,42 @@
-# DEYN APK build
+# DEYN — حزمة بناء الـ APK (التطبيق + مولّد الأكواد)
 
-This repository contains the GitHub Actions workflow for building DEYN.
+```
+deyn-app/      ← APK 1: تطبيق DEYN (شاشة التفعيل + الدفتر)   com.deyn.app
+deyn-keygen/   ← APK 2: مولّد الأكواد الخاص بك فقط           com.deyn.keygen
+.github/workflows/build-apk.yml  ← بناء الاثنين تلقائياً على GitHub (بدون تثبيت Android Studio)
+```
 
-## One required upload
-Upload the file `DEYN-secure-v2-project.zip` to the root of this repository, then commit it to `main`.
+## الطريقة الأسهل: GitHub Actions
+1. ارفع هذا المجلد كاملاً إلى مستودع GitHub خاص.
+2. تبويب **Actions ← Build DEYN APKs ← Run workflow**.
+3. بعد دقائق نزّل `deyn-app-apk` و `deyn-keygen-apk` من الـ Artifacts.
 
-The workflow `.github/workflows/build-deyn.yml` will automatically:
-1. Extract the archive.
-2. Build `deyn-app` and `deyn-keygen`.
-3. Publish two debug APK artifacts for testing.
+## الطريقة المحلية (Node 20 + JDK 21 + Android SDK)
+```bash
+cd deyn-app            # ثم كرّر نفس الشيء في deyn-keygen
+npm install
+python3 scripts/fetch_fonts.py     # مرة واحدة وأنت متصل: يجعل الخطوط محلية (للعمل بدون انترنت)
+npm run android:add                # cap add android + الأيقونات + المزامنة
+npm run android:apk                # الناتج: android/app/build/outputs/apk/debug/*.apk
+```
+بعد تعديل `www/index.html` شغّل `npm run android:sync` ثم ابنِ من جديد.
 
-**Important:** these are debug/test APKs, not production release APKs. Do not distribute them to customers. A stable Android release keystore must be configured before commercial release.
+## ⚠️ مهم جداً قبل التوزيع
+**ثبّت مفتاح التوقيع (keystore) من أول نسخة تبيعها ولا تغيّره أبداً.**
+معرّف الجهاز مشتق من `ANDROID_ID`، وهذا يتغيّر على أندرويد 8+ إذا تغيّر مفتاح توقيع التطبيق.
+إذا بدّلت المفتاح (مثلاً من debug إلى release) سيتغيّر معرّف الجهاز عند كل عملائك وتبطل أكوادهم.
+لذلك وقّع نسخة التوزيع بمفتاحك الخاص (الـ workflow يدعم ذلك عبر الأسرار `KEYSTORE_BASE64` و`KS_PASS` و`KS_ALIAS`) واحتفظ بنسخة احتياطية من الـ keystore.
 
-Never upload `deyn-private-signing-key.pem` to this repository. Keep it offline and private.
+## صيغة الكود
+`DEYN-[M|W][1Y|2Y|LT]-XXXX-XXXX`  مثال: `DEYN-M1Y-5AE3-5A2F`
+التوقيع = أول 8 خانات hex من `HMAC-SHA256(مفتاح = SECRET_KEY، رسالة = DeviceID + Tier + Role)`.
+نفس الكود البرمجي للتشفير موجود حرفياً في الملفين (الاختبار: مطابق لـ Node `crypto` في 1800 حالة).
+
+## قائمة فحص على الهاتف (لم تُجرَّب على جهاز حقيقي من طرفي)
+- [ ] معرّف الجهاز نفسه بعد: إغلاق التطبيق، إعادة التشغيل، تحديث APK بنفس التوقيع، حذف التطبيق وتثبيته من جديد.
+- [ ] التفعيل بكود من المولّد يعمل ثم يبقى بعد إعادة التشغيل بدون انترنت.
+- [ ] كود عامل (W): الحذف والتعديل مقفولان ولا يمكن التحويل لوضع المالك.
+- [ ] تقديم ساعة الهاتف للخلف أكثر من دقيقتين يقفل التطبيق، وإرجاعها يفتحه.
+- [ ] أزرار «لصق» و«نسخ» و«إرسال عبر واتساب» (تحتاج واتساب مثبّتاً).
+- [ ] الهيدر لا يختفي تحت شريط الحالة (إن حدث ذلك على أندرويد 15 أخبرني لنضبط الـ insets).
+- [ ] تصدير PDF/JSON من الإعدادات: التنزيل من داخل WebView قد يحتاج إضافة `@capacitor/filesystem` + `@capacitor/share`.
