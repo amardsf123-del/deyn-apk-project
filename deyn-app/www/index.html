@@ -1639,7 +1639,7 @@ const syAgo = t => { if (!t) return 'لم تنجح بعد'; const m = Math.round
 function syRefreshUi() { if (document.getElementById('syncBody')) { const b = document.getElementById('syncBody'); b.innerHTML = syBodyHtml(); } }
 /* ============ Cloudflare Cloud Sync (E2E Encrypted, Optional, Independent of Local Wi-Fi) ============ */
 // Developer-configured Cloudflare Worker URL (set once before release; hidden from merchant UI)
-const DEYN_CLOUD_SYNC_ENDPOINT = '';
+const DEYN_CLOUD_SYNC_ENDPOINT = 'https://deyn-cloud-sync.amardsf123.workers.dev';
 const CLOUD_SYNC = { running: false, timer: null, msg: '', status: 'idle', lastSuccess: 0, lastError: '', pending: 0 };
 const cloudSyncEnabled = () => !!(S && S.settings && S.settings.cloudSyncEnabled === true);
 const cloudSyncUrl = () => String(DEYN_CLOUD_SYNC_ENDPOINT || (S && S.settings && S.settings.cloudSyncUrl) || '').trim().replace(/\/+$/, '');
