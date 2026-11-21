@@ -90,12 +90,35 @@ jobs:
           cp deyn-app/native/DeynSmsPlugin.java DeynSmsPlugin.java
           echo "Current app source hashes:"
           sha256sum deyn-app/www/index.html deyn-app/native/DeynSmsPlugin.java
-          python3 -m py_compile .github/scripts/integrate_sms.py .github/scripts/verify_sms_delivery.py
+          python3 -m py_compile .github/scripts/integrate_sms.py
           node --check sms/engine.js
           node --check sms/runtime.js
           node sms/test.mjs | tee sms-engine-tests.log
           python3 .github/scripts/integrate_sms.py "$PROJECT_ROOT" sms/engine.js DeynSmsPlugin.java
-          python3 .github/scripts/verify_sms_delivery.py | tee sms-static-checks.log
+          python3 - <<'PY' | tee sms-static-checks.log
+          from pathlib import Path
+          native = Path("deyn-app/native/DeynSmsPlugin.java").read_text(encoding="utf-8")
+          checks = {
+              "active queue and payload snapshots": "ACTIVE_QUEUE_JSON" in native and "ACTIVE_PAYLOADS" in native,
+              "pre-dispatch API-call marker": "API_CALLED_PREFIX" in native,
+              "uncertain dispatch state is explicit": "STATUS_DISPATCH_UNCERTAIN" in native,
+              "stale in-flight reconciliation": "STALE_INFLIGHT_MS" in native and "reconcileStaleInFlightLocked" in native,
+              "permission retry interval is defined": "PERMISSION_RETRY_MS" in native,
+              "queue scheduling and deduplicated work": "enqueueQueueItems" in native and "enqueueUniqueWork" in native,
+              "native retry worker exists": "class SmsWorker" in native and "Result.retry()" in native,
+              "periodic recovery sweep exists": "class SmsSweepWorker" in native and "SWEEPER_NAME" in native,
+              "SMS delivery receiver exists": "class SmsStatusReceiver" in native and "ACTION_SMS_DELIVERED" in native,
+              "payload identity is calculated": "payloadKey(" in native,
+              "diagnostics endpoint exists": "getDiagnostics" in native and "permissionSendSms" in native,
+              "attempt limit is defined": "MAX_ATTEMPTS" in native,
+          }
+          for name, ok in checks.items():
+              print(("PASS" if ok else "FAIL") + ": " + name)
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit("Current native SMS plugin verification failed: " + "; ".join(failed))
+          print("Current repository-native SMS plugin structural verification passed.")
+          PY
           cmp -s deyn-app/native/DeynSmsPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynSmsPlugin.java"
           grep -Fq "const DEYN_CLOUD_SYNC_ENDPOINT = 'https://deyn-cloud-sync.amardsf123.workers.dev';" "$PROJECT_ROOT/deyn-app/www/index.html"
           echo "Verified APK inputs: latest cloud-sync HTML + current native SMS plugin."
