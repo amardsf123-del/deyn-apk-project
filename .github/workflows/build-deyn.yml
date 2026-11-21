@@ -14,6 +14,8 @@ on:
       - 'DeynSmsPlugin.java'
       - 'DeynBackupPlugin.java'
       - 'DeynNotifPlugin.java'
+      - 'deyn-app/www/index.html'
+      - 'deyn-app/native/DeynSmsPlugin.java'
   push:
     branches: [main]
     paths:
@@ -26,6 +28,8 @@ on:
       - 'DeynSmsPlugin.java'
       - 'DeynBackupPlugin.java'
       - 'DeynNotifPlugin.java'
+      - 'deyn-app/www/index.html'
+      - 'deyn-app/native/DeynSmsPlugin.java'
 
 permissions:
   contents: read
@@ -80,13 +84,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Overlay the current repository app HTML and native SMS plugin onto the verified archive baseline.
+          # This ensures the APK contains the latest cloud-sync patch and the exact native SMS implementation.
+          cp deyn-app/www/index.html "$PROJECT_ROOT/deyn-app/www/index.html"
+          cp deyn-app/native/DeynSmsPlugin.java DeynSmsPlugin.java
+          echo "Current app source hashes:"
+          sha256sum deyn-app/www/index.html deyn-app/native/DeynSmsPlugin.java
           python3 -m py_compile .github/scripts/integrate_sms.py .github/scripts/verify_sms_delivery.py
           node --check sms/engine.js
           node --check sms/runtime.js
           node sms/test.mjs | tee sms-engine-tests.log
           python3 .github/scripts/integrate_sms.py "$PROJECT_ROOT" sms/engine.js DeynSmsPlugin.java
           python3 .github/scripts/verify_sms_delivery.py | tee sms-static-checks.log
-          cmp -s DeynSmsPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynSmsPlugin.java"
+          cmp -s deyn-app/native/DeynSmsPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynSmsPlugin.java"
+          grep -Fq "const DEYN_CLOUD_SYNC_ENDPOINT = 'https://deyn-cloud-sync.amardsf123.workers.dev';" "$PROJECT_ROOT/deyn-app/www/index.html"
+          grep -q "version: 'v2-e2ee'" "$PROJECT_ROOT/deyn-app/www/index.html"
+          echo "Verified APK inputs: latest cloud-sync HTML + current native SMS plugin."
           cmp -s DeynBackupPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynBackupPlugin.java"
           cmp -s DeynNotifPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynNotifPlugin.java"
           grep -q 'DEYN_SMS_ENGINE_V1' "$PROJECT_ROOT/deyn-app/www/index.html"
