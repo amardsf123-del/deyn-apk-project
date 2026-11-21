@@ -4,21 +4,31 @@
  * Security & Multi-Tenant Architecture:
  * - Strictly 1 isolated Durable Object (with its own SQLite storage) per `merchantId`.
  * - Zero cross-merchant queries or shared tables.
- * - All debt/customer payloads are E2E encrypted client-side (AES-256-GCM) BEFORE upload;
- *   Cloudflare only stores opaque ciphertext blobs + monotonic sequence numbers.
+ * - Owner bootstrap verifies the official Ed25519-signed DEYN3 licence (public key only — zero secrets).
+ * - All debt/customer payloads are E2E encrypted client-side with a true 256-bit shared secret
+ *   (HKDF-SHA256 + AES-256-GCM with AAD) exchanged directly between merchant devices during pairing;
+ *   Cloudflare NEVER sees the encryption key or plaintext data.
  * - Every request is authenticated with the device's Ed25519 signature + anti-replay timestamp.
- * - Zero Cloudflare secrets or API tokens are ever stored in the Android APK.
+ * - Supports explicit Owner-only device revocation (/v1/sync/revoke).
  */
 
 const enc = new TextEncoder();
+const dec = new TextDecoder();
 
-function b64uToBytes(str) {
-  const pad = '='.repeat((4 - (str.length % 4)) % 4);
-  const b64 = (str + pad).replace(/-/g, '+').replace(/_/g, '/');
+// Public Ed25519 verification key for DEYN3 licences (public key only; matches app DEYN_PUBLIC_KEY)
+const DEYN_LIC_PUBLIC_KEY_B64 = 'uM8GgGamY++GH9e2PTTkluRlzqEVdbnj+MLh4uFYr/Y=';
+
+function b64ToBytes(b64) {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+function b64uToBytes(str) {
+  const pad = '='.repeat((4 - (str.length % 4)) % 4);
+  const b64 = (str + pad).replace(/-/g, '+').replace(/_/g, '/');
+  return b64ToBytes(b64);
 }
 
 function json(data, status = 200) {
@@ -43,6 +53,32 @@ async function verifyEd25519(pubB64u, sigB64u, messageBytes) {
     return await crypto.subtle.verify('Ed25519', key, sigRaw, messageBytes);
   } catch {
     return false;
+  }
+}
+
+async function verifyDeynOwnerLicence(code, expectedDeviceId, env) {
+  try {
+    const clean = String(code || '').replace(/[\s\u200e\u200f\u202a-\u202e]+/g, '');
+    const m = /^DEYN3-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(clean);
+    if (!m) return null;
+    const body = b64uToBytes(m[1]);
+    const sig = b64uToBytes(m[2]);
+    if (sig.length !== 64) return null;
+    const raw = dec.decode(body);
+    const p = JSON.parse(raw);
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const keys = Object.keys(p).sort().join(',');
+    if (keys !== 'd,exp,n,r,t,v' || p.v !== 3 || p.d !== expectedDeviceId || p.r !== 'M') return null;
+    if (!['1Y', '2Y', 'LT'].includes(p.t)) return null;
+    if (p.t !== 'LT' && (!Number.isSafeInteger(p.exp) || Date.now() >= p.exp)) return null;
+    const canonical = JSON.stringify({ v: p.v, d: p.d, t: p.t, r: p.r, exp: p.exp, n: p.n });
+    if (canonical !== raw) return null;
+    const pubB64 = (env && env.DEYN_LIC_PUBLIC_KEY) || DEYN_LIC_PUBLIC_KEY_B64;
+    const key = await crypto.subtle.importKey('raw', b64ToBytes(pubB64), { name: 'Ed25519' }, false, ['verify']);
+    const ok = await crypto.subtle.verify('Ed25519', key, sig, body);
+    return ok ? p : null;
+  } catch {
+    return null;
   }
 }
 
@@ -98,7 +134,6 @@ export class MerchantSyncDO {
       return json({ ok: false, error: 'payload_too_large' }, 413);
     }
 
-    // Verify device registration & Ed25519 signature
     const existing = this.sql.exec(
       'SELECT device_id, idpub, role, revoked FROM devices WHERE device_id = ?',
       deviceId
@@ -118,9 +153,13 @@ export class MerchantSyncDO {
 
       const ownerRows = this.sql.exec("SELECT device_id, idpub FROM devices WHERE role = 'M' AND revoked = 0").toArray();
       if (ownerRows.length === 0) {
-        // Bootstrap: first owner device claims this merchant room
+        // Bootstrap: first owner device MUST prove ownership with a valid Ed25519-signed DEYN3 Owner licence
         if (role !== 'M' || targetDid !== deviceId) {
           return json({ ok: false, error: 'owner_must_register_first' }, 403);
+        }
+        const lic = await verifyDeynOwnerLicence(body.licence, deviceId, this.env);
+        if (!lic) {
+          return json({ ok: false, error: 'invalid_owner_licence' }, 403);
         }
         if (!(await verifyEd25519(targetPub, sig, enc.encode(canonical)))) {
           return json({ ok: false, error: 'invalid_signature' }, 401);
@@ -140,11 +179,30 @@ export class MerchantSyncDO {
       if (!(await verifyEd25519(owner.idpub, sig, enc.encode(canonical)))) {
         return json({ ok: false, error: 'invalid_signature' }, 401);
       }
+      const assignRole = targetDid === owner.device_id ? 'M' : 'W';
       this.sql.exec(
         'INSERT INTO devices (device_id, idpub, role, registered_at, revoked) VALUES (?, ?, ?, ?, 0) ON CONFLICT(device_id) DO UPDATE SET idpub = excluded.idpub, role = excluded.role, revoked = 0',
-        targetDid, targetPub, role, Date.now()
+        targetDid, targetPub, assignRole, Date.now()
       );
-      return json({ ok: true, registered: targetDid, role });
+      return json({ ok: true, registered: targetDid, role: assignRole });
+    }
+
+    if (url.pathname === '/v1/sync/revoke' && request.method === 'POST') {
+      const ownerRows = this.sql.exec("SELECT device_id, idpub FROM devices WHERE role = 'M' AND revoked = 0").toArray();
+      if (!ownerRows.length || ownerRows[0].device_id !== deviceId) {
+        return json({ ok: false, error: 'owner_only_revocation' }, 403);
+      }
+      if (!(await verifyEd25519(ownerRows[0].idpub, sig, enc.encode(canonical)))) {
+        return json({ ok: false, error: 'invalid_signature' }, 401);
+      }
+      let body;
+      try { body = JSON.parse(rawBody || '{}'); } catch { return json({ ok: false, error: 'bad_json' }, 400); }
+      const targetDid = String(body.targetDeviceId || '');
+      if (!/^[0-9a-f]{32}$/.test(targetDid) || targetDid === ownerRows[0].device_id) {
+        return json({ ok: false, error: 'invalid_revoke_target' }, 400);
+      }
+      this.sql.exec("UPDATE devices SET revoked = 1 WHERE device_id = ? AND role = 'W'", targetDid);
+      return json({ ok: true, revoked: targetDid });
     }
 
     // All push/pull calls require a registered, non-revoked device in THIS merchant room
@@ -165,7 +223,6 @@ export class MerchantSyncDO {
       if (!batchId || !ciphertext || !iv) {
         return json({ ok: false, error: 'missing_encrypted_batch_fields' }, 400);
       }
-      // Idempotent insert: duplicate batchId is safely ignored (no duplicate debt entries)
       const dup = this.sql.exec('SELECT seq FROM batches WHERE batch_id = ?', batchId).toArray();
       if (dup.length) {
         return json({ ok: true, seq: dup[0].seq, duplicate: true });
@@ -210,7 +267,7 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return json({ ok: true });
     if (url.pathname === '/v1/health') {
-      return json({ ok: true, service: 'deyn-cloud-sync', storage: 'durable-objects-sqlite' });
+      return json({ ok: true, service: 'deyn-cloud-sync', storage: 'durable-objects-sqlite', version: 'v2-e2ee' });
     }
     const merchantId = request.headers.get('x-deyn-merchant') || '';
     if (!/^[A-Za-z0-9_-]{8,80}$/.test(merchantId)) {
