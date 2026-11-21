@@ -1465,7 +1465,16 @@ class Session {
     const res = { sent: 0, received: 0 };
     if (this.role === 'initiator') { res.sent = await this._sendEvents2(sy); res.received = await this._recvEvents2(sy); }
     else { res.received = await this._recvEvents2(sy); res.sent = await this._sendEvents2(sy); }
-    await this.send({ m: 'done' }); const d = await this.next(); if (d.m !== 'done') throw new Error('expected done');
+    const doneMsg = { m: 'done' };
+    if (this.role === 'responder' && typeof this.ctx.getCloudSecret === 'function') {
+      try { const ck = await this.ctx.getCloudSecret(); if (ck && ck.secret) doneMsg.ck = ck; } catch (e) {}
+    }
+    await this.send(doneMsg);
+    const d = await this.next();
+    if (d.m !== 'done') throw new Error('expected done');
+    if (this.role === 'initiator' && d.ck && d.ck.secret && typeof this.ctx.saveCloudSecret === 'function') {
+      try { await this.ctx.saveCloudSecret(d.ck); } catch (e) {}
+    }
     return res;
   }
   // wrappers keeping the (state -> events -> ack) pairing symmetric: the SENDER first announces nothing; the RECEIVER announces its cursor.
@@ -1563,6 +1572,8 @@ function syCtx() {
     getPeer: id => { const p = syState().peers[id]; return p && p.idpub ? p : null; },
     savePeer: (id, rec) => { const sy = syState(); sy.peers[id] = Object.assign(sy.peers[id] || { recv: 0, acked: 0 }, rec); persist(); },
     get pairing() { return SYNC.pairing; },
+    getCloudSecret: async () => !isWorkerDevice() ? await cloudGetOrCreateSecret() : null,
+    saveCloudSecret: async (ck) => { if (isWorkerDevice() && ck && ck.secret) await cloudSaveSecret(ck); },
     sync: {
       prepare: async () => { DeynSyncLib.captureLocal(S, DEYN_DEV_ID, Date.now()); persist(); },
       recvFrom: p => ((syState().peers[p] || {}).recv || 0),
@@ -1632,7 +1643,7 @@ function syLoop() {
 let SYDEB = null;
 function sySchedule() { if (!S || !syPeers().length || !isWorkerDevice()) return; clearTimeout(SYDEB); SYDEB = setTimeout(() => { const m = syPeers().find(p => p.role === 'M'); if (m) syConnect(m.did, null); }, 4000); }
 async function syInit() {                                              // called once after the app has started
-  try { DeynSyncLib.ensureSync(S, DEYN_DEV_ID); if (!syNative()) return; await syIdentity(); await syHook(); if (!isWorkerDevice() && syPeers().length) await syStartServer(); syLoop(); } catch (e) { console.warn('sync init failed', e); }
+  try { DeynSyncLib.ensureSync(S, DEYN_DEV_ID); if (cloudSyncEnabled()) { cloudPollStart(); cloudSyncSchedule(); } if (!syNative()) return; await syIdentity(); await syHook(); if (!isWorkerDevice() && syPeers().length) await syStartServer(); syLoop(); } catch (e) { console.warn('sync init failed', e); }
 }
 // ---- UI ----
 const syAgo = t => { if (!t) return 'لم تنجح بعد'; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'قبل لحظات' : m < 60 ? 'قبل ' + m + ' دقيقة' : m < 1440 ? 'قبل ' + Math.round(m / 60) + ' ساعة' : 'قبل ' + Math.round(m / 1440) + ' يوم'; };
@@ -1644,22 +1655,80 @@ const CLOUD_SYNC = { running: false, timer: null, msg: '', status: 'idle', lastS
 const cloudSyncEnabled = () => !!(S && S.settings && S.settings.cloudSyncEnabled === true);
 const cloudSyncUrl = () => String(DEYN_CLOUD_SYNC_ENDPOINT || (S && S.settings && S.settings.cloudSyncUrl) || '').trim().replace(/\/+$/, '');
 
-function csB64u(u8) { return btoa(String.fromCharCode(...u8)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
-function csUnb64u(s) { const p = s.replace(/-/g, '+').replace(/_/g, '/'); const b = atob(p + '='.repeat((4 - p.length % 4) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); }
+// Safe loop-based Base64URL helpers (zero call-stack overflow on large batches)
+function csB64u(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function csUnb64u(s) {
+  const p = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
+  const b = atob(p + '='.repeat((4 - p.length % 4) % 4));
+  const out = new Uint8Array(b.length);
+  for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
+  return out;
+}
+function csToB64u(b64Str) { return String(b64Str || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 
-async function cloudRoomKey(merchantId) {
-  const peers = syPeers();
-  const ownerPub = !isWorkerDevice() ? (await syIdentity()).pub : ((peers.find(p => p.role === 'M') || {}).idpub || '');
-  if (!merchantId || !ownerPub) throw new Error('أقرِن الهاتفين عبر QR أولاً لتوليد مفتاح التشفير المشترك');
-  const raw = new TextEncoder().encode('DEYN-CLOUD-ROOM-V1|' + merchantId + '|' + ownerPub);
-  const hash = await crypto.subtle.digest('SHA-256', raw);
-  return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+// True 256-bit shared secret stored in secure DeynStore (NEVER sent to Cloudflare)
+const CLOUD_SECRET_STORE_KEY = 'cloud_e2e_secret_v2';
+async function cloudLoadSecret() {
+  try {
+    const raw = await DeynStore.get(CLOUD_SECRET_STORE_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return (o && typeof o.secret === 'string' && o.secret.length >= 32) ? o : null;
+  } catch (e) { return null; }
+}
+async function cloudSaveSecret(rec) {
+  if (!rec || typeof rec.secret !== 'string' || rec.secret.length < 32) return null;
+  const clean = { secret: rec.secret, kv: Math.max(1, Number(rec.kv) || 1), mid: String(rec.mid || deynMerchantId() || '') };
+  await DeynStore.set(CLOUD_SECRET_STORE_KEY, JSON.stringify(clean));
+  return clean;
+}
+async function cloudGetOrCreateSecret() {
+  const cur = await cloudLoadSecret();
+  if (cur) return cur;
+  if (isWorkerDevice()) return null;
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return cloudSaveSecret({ secret: csB64u(bytes), kv: 1, mid: deynMerchantId() });
+}
+async function cloudRotateSecret() {
+  if (isWorkerDevice()) return null;
+  const cur = await cloudLoadSecret();
+  const nextKv = cur ? (Math.max(1, Number(cur.kv) || 1) + 1) : 1;
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return cloudSaveSecret({ secret: csB64u(bytes), kv: nextKv, mid: deynMerchantId() });
+}
+
+// HKDF-SHA256 key derivation from the true 256-bit shared secret (Cloudflare cannot derive this)
+async function cloudRoomKey(merchantId, secretRec) {
+  if (!merchantId || !secretRec || !secretRec.secret) {
+    throw new Error('أقرِن الهاتفين عبر QR أولاً لتبادل مفتاح التشفير المشترك');
+  }
+  const ikm = csUnb64u(secretRec.secret);
+  const baseKey = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new TextEncoder().encode(String(merchantId)),
+      info: new TextEncoder().encode('DEYN-CLOUD-E2E-V2|kv=' + (secretRec.kv || 1))
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+function cloudBatchAad(merchantId, senderDevice, batchId) {
+  return new TextEncoder().encode('DEYN-CLOUD-BATCH-V2|' + merchantId + '|' + senderDevice + '|' + batchId);
 }
 
 async function cloudSignedFetch(method, path, bodyObj) {
-  if (!cloudSyncEnabled()) throw new Error('المزامنة السحابية متوقفة');
+  if (!cloudSyncEnabled()) throw new Error('المزامنة الذكية متوقفة');
   const base = cloudSyncUrl();
-  if (!base || !/^https?:\/\//i.test(base)) throw new Error('أدخل رابط خادم Cloudflare Worker في إعدادات المزامنة السحابية');
+  if (!base || !/^https?:\/\//i.test(base)) throw new Error('رابط خادم المزامنة غير مضبوط');
   const mid = deynMerchantId();
   if (!mid) throw new Error('معرّف التاجر غير متوفر');
   const idn = await syIdentity();
@@ -1667,8 +1736,7 @@ async function cloudSignedFetch(method, path, bodyObj) {
   const rawBody = bodyObj ? JSON.stringify(bodyObj) : '';
   const parsedUrl = new URL(base + path);
   const canonical = [method, parsedUrl.pathname, parsedUrl.search, mid, DEYN_DEV_ID, ts, rawBody].join('|');
-  const sigB64 = await idn.sign(new TextEncoder().encode(canonical));
-  const sigU = sigB64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const sigU = csToB64u(await idn.sign(new TextEncoder().encode(canonical)));
   const res = await fetch(base + path, {
     method,
     headers: {
@@ -1677,7 +1745,7 @@ async function cloudSignedFetch(method, path, bodyObj) {
       'x-deyn-device': DEYN_DEV_ID,
       'x-deyn-ts': ts,
       'x-deyn-sig': sigU,
-      'x-deyn-idpub': idn.pub.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+      'x-deyn-idpub': csToB64u(idn.pub)
     },
     body: method === 'POST' ? rawBody : undefined
   });
@@ -1686,69 +1754,116 @@ async function cloudSignedFetch(method, path, bodyObj) {
   return data;
 }
 
+const CLOUD_POLL_MS = 25000;
+function cloudPollStart() {
+  clearInterval(CLOUD_SYNC.timer);
+  CLOUD_SYNC.timer = null;
+  if (!cloudSyncEnabled()) return;
+  CLOUD_SYNC.timer = setInterval(() => {
+    if (cloudSyncEnabled() && !document.hidden && !CLOUD_SYNC.running) cloudSyncNow(true);
+  }, CLOUD_POLL_MS);
+}
+
 async function cloudSyncNow(silent) {
   if (!cloudSyncEnabled()) {
     CLOUD_SYNC.status = 'off';
-    CLOUD_SYNC.msg = 'المزامنة السحابية متوقفة — لا يتم إرسال أي بيانات عبر الإنترنت';
+    CLOUD_SYNC.msg = '';
     return { ok: false, skipped: true, reason: 'disabled' };
   }
   if (deynReadOnly && deynReadOnly()) return { ok: false, skipped: true, reason: 'read-only' };
   if (CLOUD_SYNC.running) return { ok: false, skipped: true, reason: 'busy' };
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     CLOUD_SYNC.status = 'queued';
-    CLOUD_SYNC.msg = 'لا يوجد اتصال بالإنترنت — تم حفظ التغييرات في طابور المزامنة السحابية لحين عودة الشبكة';
-    syRefreshUi();
     return { ok: false, queued: true, reason: 'offline' };
   }
   const base = cloudSyncUrl();
   if (!base) {
     CLOUD_SYNC.status = 'unconfigured';
-    CLOUD_SYNC.msg = 'أدخل رابط Cloudflare Worker لتفعيل المزامنة السحابية';
-    if (!silent) toast(CLOUD_SYNC.msg, 'warn');
-    syRefreshUi();
     return { ok: false, reason: 'no_url' };
   }
   CLOUD_SYNC.running = true;
   try {
     const sy = syState();
     DeynSyncLib.captureLocal(S, DEYN_DEV_ID, Date.now());
-    sy.cloud = sy.cloud || { afterSeq: 0, pushedSeq: 0, registered: false };
-    const mid = deynMerchantId();
-    const roomKey = await cloudRoomKey(mid);
+    sy.cloud = sy.cloud || { afterSeq: 0, pushedSeq: 0, ownerRegistered: false, registeredPeers: {}, pendingRevokes: [] };
+    if (!sy.cloud.registeredPeers || typeof sy.cloud.registeredPeers !== 'object') sy.cloud.registeredPeers = {};
+    if (!Array.isArray(sy.cloud.pendingRevokes)) sy.cloud.pendingRevokes = [];
 
-    // 1. Ensure device registration (owner registers itself + paired workers)
-    if (!sy.cloud.registered && !isWorkerDevice()) {
-      await cloudSignedFetch('POST', '/v1/sync/register', { role: 'M', targetDeviceId: DEYN_DEV_ID, targetIdpub: (await syIdentity()).pub.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') });
-      for (const p of syPeers()) {
-        await cloudSignedFetch('POST', '/v1/sync/register', { role: p.role, targetDeviceId: p.did, targetIdpub: p.idpub.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') });
+    const mid = deynMerchantId();
+    const secretRec = isWorkerDevice() ? (await cloudLoadSecret()) : (await cloudGetOrCreateSecret());
+    if (!secretRec) throw new Error('أقرِن الهاتفين عبر QR أولاً لتبادل مفتاح التشفير المشترك');
+    const roomKey = await cloudRoomKey(mid, secretRec);
+
+    // 1. Owner manages device registrations & revocations dynamically
+    if (!isWorkerDevice()) {
+      const idn = await syIdentity();
+      if (!sy.cloud.ownerRegistered) {
+        await cloudSignedFetch('POST', '/v1/sync/register', {
+          role: 'M',
+          targetDeviceId: DEYN_DEV_ID,
+          targetIdpub: csToB64u(idn.pub),
+          licence: (DEYN_LIC && DEYN_LIC.code) || ''
+        });
+        sy.cloud.ownerRegistered = true;
       }
-      sy.cloud.registered = true;
+      // Register any newly paired worker (or updated idpub)
+      for (const p of syPeers()) {
+        const pubU = csToB64u(p.idpub);
+        if (sy.cloud.registeredPeers[p.did] !== pubU) {
+          await cloudSignedFetch('POST', '/v1/sync/register', {
+            role: p.role === 'M' ? 'M' : 'W',
+            targetDeviceId: p.did,
+            targetIdpub: pubU
+          });
+          sy.cloud.registeredPeers[p.did] = pubU;
+        }
+      }
+      // Process any pending worker revocations
+      while (sy.cloud.pendingRevokes.length) {
+        const revDid = sy.cloud.pendingRevokes[0];
+        await cloudSignedFetch('POST', '/v1/sync/revoke', { targetDeviceId: revDid });
+        sy.cloud.pendingRevokes.shift();
+        delete sy.cloud.registeredPeers[revDid];
+      }
     }
 
-    // 2. Push local unsent events (E2E AES-GCM encrypted)
+    // 2. Push local unsent events (fixed: uses DeynSyncLib event sequence `e.s`, E2E AES-GCM with AAD)
     const evs = DeynSyncLib.eventsAfter(S, DEYN_DEV_ID, sy.cloud.pushedSeq || 0);
     let pushed = 0;
     for (let i = 0; i < evs.length; i += DeynSyncLib.MAX_EVENTS_PER_BATCH) {
       const chunk = evs.slice(i, i + DeynSyncLib.MAX_EVENTS_PER_BATCH);
-      const lastSeq = chunk[chunk.length - 1].seq;
-      const batchId = DEYN_DEV_ID + ':' + chunk[0].seq + '-' + lastSeq;
+      const firstS = chunk[0].s;
+      const lastS = chunk[chunk.length - 1].s;
+      const batchId = 'v' + (secretRec.kv || 1) + ':' + DEYN_DEV_ID + ':' + firstS + '-' + lastS;
       const iv = crypto.getRandomValues(new Uint8Array(12));
-      const pt = new TextEncoder().encode(JSON.stringify({ did: DEYN_DEV_ID, role: isWorkerDevice() ? 'W' : 'M', events: chunk }));
-      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, roomKey, pt));
+      const pt = new TextEncoder().encode(JSON.stringify({ v: 2, did: DEYN_DEV_ID, events: chunk }));
+      const aad = cloudBatchAad(mid, DEYN_DEV_ID, batchId);
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad }, roomKey, pt));
       await cloudSignedFetch('POST', '/v1/sync/push', { batchId, ciphertext: csB64u(ct), iv: csB64u(iv), eventCount: chunk.length });
-      sy.cloud.pushedSeq = lastSeq;
+      sy.cloud.pushedSeq = lastS;
       pushed += chunk.length;
     }
 
-    // 3. Pull remote encrypted batches and apply via DeynSyncLib CRDT/HLC engine
+    // 3. Pull remote encrypted batches, verify pinned peer role, filter Wi-Fi-already-applied events, advance afterSeq ONLY on ok
     const pulledRes = await cloudSignedFetch('GET', '/v1/sync/pull?afterSeq=' + encodeURIComponent(String(sy.cloud.afterSeq || 0)));
     let pulled = 0;
     for (const b of (pulledRes.batches || [])) {
-      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: csUnb64u(b.iv) }, roomKey, csUnb64u(b.ciphertext));
+      const pinnedPeer = sy.peers[b.senderDevice];
+      if (!pinnedPeer || !pinnedPeer.idpub || !pinnedPeer.role) {
+        // Ignore batches from unpaired/revoked devices without advancing cursor past unknown state
+        sy.cloud.afterSeq = Math.max(sy.cloud.afterSeq || 0, Number(b.seq) || 0);
+        continue;
+      }
+      const aad = cloudBatchAad(mid, b.senderDevice, b.batchId);
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: csUnb64u(b.iv), additionalData: aad }, roomKey, csUnb64u(b.ciphertext));
       const decoded = JSON.parse(new TextDecoder().decode(pt));
-      const peerRole = decoded.role === 'M' ? 'M' : 'W';
-      const r = DeynSyncLib.applyBatch(S, DEYN_DEV_ID, b.senderDevice, peerRole, decoded.events || [], Date.now());
-      if (r.ok) pulled += r.applied;
+      const alreadyRecv = Number(pinnedPeer.recv || 0);
+      const freshEvs = (Array.isArray(decoded.events) ? decoded.events : []).filter(ev => Number(ev && ev.s) > alreadyRecv);
+      if (freshEvs.length > 0) {
+        const r = DeynSyncLib.applyBatch(S, DEYN_DEV_ID, b.senderDevice, pinnedPeer.role, freshEvs, Date.now());
+        if (!r.ok) throw new Error('batch_apply_failed:' + (r.reason || 'unknown'));
+        pulled += r.applied;
+      }
       sy.cloud.afterSeq = Math.max(sy.cloud.afterSeq || 0, Number(b.seq) || 0);
     }
     if (pulled > 0) { renderAll(); }
@@ -1756,14 +1871,12 @@ async function cloudSyncNow(silent) {
     CLOUD_SYNC.status = 'ok';
     CLOUD_SYNC.lastSuccess = Date.now();
     CLOUD_SYNC.lastError = '';
-    CLOUD_SYNC.msg = 'تمت المزامنة السحابية ✅ (أُرسل ' + pushed + ' • استُلم ' + pulled + ')';
-    if (!silent) toast(CLOUD_SYNC.msg, 'ok');
+    if (!silent) toast('تمت المزامنة الذكية ✅', 'ok');
     return { ok: true, pushed, pulled };
   } catch (err) {
     CLOUD_SYNC.status = 'error';
     CLOUD_SYNC.lastError = String((err && err.message) || err).slice(0, 140);
-    CLOUD_SYNC.msg = 'تعذّرت المزامنة السحابية: ' + CLOUD_SYNC.lastError + ' — التغييرات محفوظة محليًا وستُرسل عند توفر الاتصال';
-    if (!silent) toast(CLOUD_SYNC.msg, 'err');
+    if (!silent) toast('تعذّرت المزامنة الذكية مؤقتًا — التغييرات محفوظة محليًا', 'err');
     return { ok: false, error: CLOUD_SYNC.lastError };
   } finally {
     CLOUD_SYNC.running = false;
@@ -1773,16 +1886,18 @@ async function cloudSyncNow(silent) {
 
 let CLOUD_DEB = null;
 function cloudSyncSchedule() {
-  if (!cloudSyncEnabled()) { clearTimeout(CLOUD_DEB); clearTimeout(CLOUD_SYNC.timer); return; }
+  if (!cloudSyncEnabled()) { clearTimeout(CLOUD_DEB); clearInterval(CLOUD_SYNC.timer); CLOUD_SYNC.timer = null; return; }
   clearTimeout(CLOUD_DEB);
   CLOUD_DEB = setTimeout(() => { if (cloudSyncEnabled() && !document.hidden) cloudSyncNow(true); }, 3500);
+  if (!CLOUD_SYNC.timer) cloudPollStart();
 }
 function cloudSyncToggle(enabled) {
   S.settings = S.settings || {};
   S.settings.cloudSyncEnabled = !!enabled;
   if (!enabled) {
     clearTimeout(CLOUD_DEB);
-    clearTimeout(CLOUD_SYNC.timer);
+    clearInterval(CLOUD_SYNC.timer);
+    CLOUD_SYNC.timer = null;
     CLOUD_SYNC.status = 'off';
     CLOUD_SYNC.msg = '';
     toast('تم إيقاف المزامنة الذكية');
@@ -1790,24 +1905,27 @@ function cloudSyncToggle(enabled) {
     CLOUD_SYNC.status = 'idle';
     CLOUD_SYNC.msg = '';
     toast('تم تفعيل المزامنة الذكية ✅');
+    cloudPollStart();
     cloudSyncSchedule();
   }
   persist();
   syRefreshUi();
 }
-function cloudSyncSaveUrl() {
-  const inp = lastById('cloudSyncUrl');
-  if (!inp) return;
-  const val = inp.value.trim().replace(/\/+$/, '');
-  if (val && !/^https?:\/\//i.test(val)) return toast('أدخل رابطًا صحيحًا يبدأ بـ https://', 'err');
-  S.settings = S.settings || {};
-  S.settings.cloudSyncUrl = val;
-  persist();
-  toast(val ? 'تم حفظ رابط خادم Cloudflare بنجاح ✅' : 'تم مسح رابط الخادم السحابي');
-  if (val && cloudSyncEnabled()) cloudSyncNow(false);
-  syRefreshUi();
-}
-window.DeynCloudSync = { isEnabled: cloudSyncEnabled, syncNow: cloudSyncNow, toggle: cloudSyncToggle, schedule: cloudSyncSchedule, state: CLOUD_SYNC };
+function cloudSyncSaveUrl() {}
+window.DeynCloudSync = {
+  isEnabled: cloudSyncEnabled,
+  syncNow: cloudSyncNow,
+  toggle: cloudSyncToggle,
+  schedule: cloudSyncSchedule,
+  getOrCreateSecret: cloudGetOrCreateSecret,
+  saveSecret: cloudSaveSecret,
+  rotateSecret: cloudRotateSecret,
+  deriveRoomKey: cloudRoomKey,
+  batchAad: cloudBatchAad,
+  b64u: csB64u,
+  unb64u: csUnb64u,
+  state: CLOUD_SYNC
+};
 window.addEventListener('online', () => { if (cloudSyncEnabled()) cloudSyncNow(true); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && cloudSyncEnabled()) cloudSyncSchedule(); });
 
@@ -1817,7 +1935,7 @@ function syBodyHtml() {
   const quarantined = (sy.quarantine || []).length;
   const cOn = cloudSyncEnabled();
   const cUrl = cloudSyncUrl();
-  const cloudPend = Math.max(0, (sy.outbox || []).filter(e => e.seq > ((sy.cloud && sy.cloud.pushedSeq) || 0)).length);
+  const cloudPend = Math.max(0, (sy.log || []).filter(e => e.s > ((sy.cloud && sy.cloud.pushedSeq) || 0)).length);
   let h = `<div style="background:#f7faf9;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px">
     <div style="font-size:13px;font-weight:800;color:var(--em);margin-bottom:6px">📶 المزامنة المحلية (Wi-Fi بدون إنترنت)</div>`;
   h += rows || '<div class="sub">لا يوجد هاتف مقترن بعد.</div>';
@@ -1945,7 +2063,7 @@ async function syScan() {
   );
 }
 function syNow() { const m = syPeers().find(p => p.role === 'M'); if (!m) return toast('لا يوجد هاتف مالك مقترن', 'err'); syConnect(m.did, null).then(ok => { toast(ok ? 'تمت المزامنة ✅' : 'تعذّرت المزامنة', ok ? 'ok' : 'err'); }); }
-function syUnpair(id) { if (!requireOwner('إلغاء الاقتران')) return; confirmBox({ title: 'إلغاء الاقتران', msg: 'لن يتمكن هذا الهاتف من المزامنة بعد الآن. لن تُحذف أي بيانات من أي هاتف.', ok: 'إلغاء الاقتران', danger: true, onOk: () => { const sy = syState(); delete sy.peers[id]; persist(); syRefreshUi(); } }); }
+function syUnpair(id) { if (!requireOwner('إلغاء الاقتران')) return; confirmBox({ title: 'إلغاء الاقتران', msg: 'لن يتمكن هذا الهاتف من المزامنة بعد الآن. لن تُحذف أي بيانات من أي هاتف.', ok: 'إلغاء الاقتران', danger: true, onOk: async () => { const sy = syState(); delete sy.peers[id]; sy.cloud = sy.cloud || { afterSeq: 0, pushedSeq: 0, ownerRegistered: false, registeredPeers: {}, pendingRevokes: [] }; if (!Array.isArray(sy.cloud.pendingRevokes)) sy.cloud.pendingRevokes = []; if (!sy.cloud.pendingRevokes.includes(id)) sy.cloud.pendingRevokes.push(id); try { await cloudRotateSecret(); } catch (e) {} persist(); syRefreshUi(); if (cloudSyncEnabled()) cloudSyncNow(true); } }); }
 
 /*SYNC-END*/
 
