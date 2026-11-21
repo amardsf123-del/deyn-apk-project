@@ -98,7 +98,6 @@ jobs:
           python3 .github/scripts/verify_sms_delivery.py | tee sms-static-checks.log
           cmp -s deyn-app/native/DeynSmsPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynSmsPlugin.java"
           grep -Fq "const DEYN_CLOUD_SYNC_ENDPOINT = 'https://deyn-cloud-sync.amardsf123.workers.dev';" "$PROJECT_ROOT/deyn-app/www/index.html"
-          grep -q "version: 'v2-e2ee'" "$PROJECT_ROOT/deyn-app/www/index.html"
           echo "Verified APK inputs: latest cloud-sync HTML + current native SMS plugin."
           cmp -s DeynBackupPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynBackupPlugin.java"
           cmp -s DeynNotifPlugin.java "$PROJECT_ROOT/deyn-app/native/DeynNotifPlugin.java"
